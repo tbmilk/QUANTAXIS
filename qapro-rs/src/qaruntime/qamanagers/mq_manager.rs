@@ -1,8 +1,7 @@
 use crate::qapubsub::market_mq::{MarketMQ, Start, Subscribe};
 use crate::qaruntime::base::{MQAddr, MarketSubscribe, ShowAllMQ};
-use actix::prelude::*;
-use actix::{Actor, Addr, Context, Handler, Recipient};
-use log::{error, info, warn};
+use actix::{Actor, Addr, Context, Handler};
+use log::{error, info};
 use std::collections::HashMap;
 
 // 作为mq与策略之间的中间件
@@ -31,14 +30,14 @@ impl Actor for MQManager {
 // mq启动后将自己的addr发送至MQM
 impl Handler<MQAddr> for MQManager {
     type Result = ();
-    fn handle(&mut self, msg: MQAddr, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: MQAddr, _ctx: &mut Self::Context) -> Self::Result {
         self.mq_pool.insert(msg.key, msg.addr);
     }
 }
 
 impl Handler<ShowAllMQ> for MQManager {
     type Result = ();
-    fn handle(&mut self, msg: ShowAllMQ, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: ShowAllMQ, _ctx: &mut Self::Context) -> Self::Result {
         info!("MarketMQ routing_key: {:#?}", self.mq_pool.keys());
     }
 }
@@ -46,7 +45,7 @@ impl Handler<ShowAllMQ> for MQManager {
 // 策略订阅某行情
 impl Handler<MarketSubscribe> for MQManager {
     type Result = ();
-    fn handle(&mut self, msg: MarketSubscribe, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: MarketSubscribe, _ctx: &mut Self::Context) -> Self::Result {
         match self.mq_pool.get(msg.key.as_str()) {
             Some(mq) => match mq.try_send(Subscribe(msg.rec)) {
                 Ok(_) => {

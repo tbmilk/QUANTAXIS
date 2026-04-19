@@ -1,9 +1,8 @@
+#![allow(non_snake_case, dead_code)]
 use crate::qaprotocol::mifi::market::BAR;
 use serde::{Deserialize, Serialize};
 use serde_json;
-use serde_json::json;
 use serde_json::value::Value;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QAKlineBase {
@@ -446,20 +445,20 @@ impl QASeries {
         //println!("dtmin {:?}", self.dtmin);
     }
 
-    pub fn update_1(&mut self, data: Value, cur_datetime: String) {
+    pub fn update_1(&mut self, data: Value, _cur_datetime: String) {
         self.cached.push(self.min1.clone());
         self.min1 = QAKlineBase::init().new(data.clone(), "1min".to_string());
     }
 
-    pub fn update_5(&mut self, data: Value, cur_datetime: String) {
+    pub fn update_5(&mut self, data: Value, _cur_datetime: String) {
         self.cached.push(self.min5.clone());
         self.min5 = QAKlineBase::init().new(data.clone(), "5min".to_string());
     }
-    pub fn update_15(&mut self, data: Value, cur_datetime: String) {
+    pub fn update_15(&mut self, data: Value, _cur_datetime: String) {
         self.cached.push(self.min15.clone());
         self.min15 = QAKlineBase::init().new(data.clone(), "15min".to_string());
     }
-    pub fn update_30(&mut self, data: Value, cur_datetime: String) {
+    pub fn update_30(&mut self, data: Value, _cur_datetime: String) {
         self.cached.push(self.min30.clone());
         self.min30 = QAKlineBase::init().new(data.clone(), "30min".to_string());
     }
@@ -606,7 +605,7 @@ mod tests {
 
         qseries.update(serde_json::to_value(new_data).unwrap());
 
-        let res = "{\"min1\":{\"datetime\":\"2020-01-20 10:20:09\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":24.0,\"high\":24.0,\"low\":24.0,\"close\":24.0,\"volume\":130.0,\"frequence\":\"1min\",\"pctchange\":0.0},\"min5\":{\"datetime\":\"2020-01-20 10:20:09\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":24.0,\"high\":24.0,\"low\":24.0,\"close\":24.0,\"volume\":130.0,\"frequence\":\"5min\",\"pctchange\":0.0},\"min15\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"frequence\":\"15min\",\"pctchange\":0.1428571428571428},\"min30\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"frequence\":\"30min\",\"pctchange\":0.1428571428571428},\"min60\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"frequence\":\"60min\",\"pctchange\":0.1428571428571428},\"day\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"frequence\":\"day\",\"pctchange\":0.1428571428571428},\"dtmin\":\"20\",\"cached\":[{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:02\",\"code\":\"000001\",\"open\":21.0,\"high\":21.0,\"low\":21.0,\"close\":21.0,\"volume\":110.0,\"frequence\":\"1min\",\"pctchange\":0.0},{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:02\",\"code\":\"000001\",\"open\":21.0,\"high\":21.0,\"low\":21.0,\"close\":21.0,\"volume\":110.0,\"frequence\":\"5min\",\"pctchange\":0.0}]}";
+        let res = "{\"min1\":{\"datetime\":\"2020-01-20 10:20:09\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":24.0,\"high\":24.0,\"low\":24.0,\"close\":24.0,\"volume\":130.0,\"amount\":3000.0,\"frequence\":\"1min\",\"pctchange\":0.0,\"startstamp\":0,\"is_last\":false},\"min5\":{\"datetime\":\"2020-01-20 10:20:09\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":24.0,\"high\":24.0,\"low\":24.0,\"close\":24.0,\"volume\":130.0,\"amount\":3000.0,\"frequence\":\"5min\",\"pctchange\":0.0,\"startstamp\":0,\"is_last\":false},\"min15\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"amount\":10000.0,\"frequence\":\"15min\",\"pctchange\":0.1428571428571428,\"startstamp\":0,\"is_last\":false},\"min30\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"amount\":10000.0,\"frequence\":\"30min\",\"pctchange\":0.1428571428571428,\"startstamp\":0,\"is_last\":false},\"min60\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"amount\":10000.0,\"frequence\":\"60min\",\"pctchange\":0.1428571428571428,\"startstamp\":0,\"is_last\":false},\"day\":{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:09\",\"code\":\"000001\",\"open\":21.0,\"high\":24.0,\"low\":21.0,\"close\":24.0,\"volume\":240.0,\"amount\":10000.0,\"frequence\":\"day\",\"pctchange\":0.1428571428571428,\"startstamp\":0,\"is_last\":false},\"dtmin\":\"20\",\"cached\":[{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:02\",\"code\":\"000001\",\"open\":21.0,\"high\":21.0,\"low\":21.0,\"close\":21.0,\"volume\":110.0,\"amount\":10000.0,\"frequence\":\"1min\",\"pctchange\":0.0,\"startstamp\":0,\"is_last\":false},{\"datetime\":\"2020-01-20 10:20:02\",\"updatetime\":\"2020-01-20 10:20:02\",\"code\":\"000001\",\"open\":21.0,\"high\":21.0,\"low\":21.0,\"close\":21.0,\"volume\":110.0,\"amount\":10000.0,\"frequence\":\"5min\",\"pctchange\":0.0,\"startstamp\":0,\"is_last\":false}]}";
         let (res1, fix) = qseries.to_json();
         assert_eq!(res, res1);
     }

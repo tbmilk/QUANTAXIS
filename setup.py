@@ -27,9 +27,6 @@ import io
 import os
 import re
 import sys
-import webbrowser
-import platform
-import configparser
 try:
     from setuptools import setup
 except ImportError:
@@ -57,15 +54,6 @@ with io.open('QUANTAXIS/__init__.py', 'rt', encoding='utf8') as f:
     context = f.read()
     VERSION = re.search(r'__version__ = \'(.*?)\'', context).group(1)
     AUTHOR = re.search(r'__author__ = \'(.*?)\'', context).group(1)
-
-
-try:
-    if sys.platform in ['win32', 'darwin']:
-        print(webbrowser.open(
-            'https://github.com/QUANTAXIS/QUANTAXIS/releases'))
-        print('finish install')
-except:
-    pass
 
 
 def read(fname):

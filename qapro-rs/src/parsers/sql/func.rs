@@ -4,4 +4,8 @@ use crate::parsers::sql::Expr;
 pub enum Func {
     Count(Expr),
     Upper(Expr),
+    Lower(Expr),
+    Ceil(Expr),
+    Floor(Expr),
+    Round(Expr),
 }

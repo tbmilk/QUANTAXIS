@@ -49,33 +49,50 @@ QAFetch - QUANTAXIS 数据获取模块
 @license: MIT
 """
 
-from QUANTAXIS.QAFetch import QATushare as QATushare
-from QUANTAXIS.QAFetch import QATdx as QATdx
-from QUANTAXIS.QAFetch import QAThs as QAThs
-from QUANTAXIS.QAFetch import QACrawler as QACL
-from QUANTAXIS.QAFetch import QAEastMoney as QAEM
-from QUANTAXIS.QAFetch import QAHexun as QAHexun
-from QUANTAXIS.QAFetch import QAfinancial
+from importlib import import_module
+
 from QUANTAXIS.QAFetch.base import get_stock_market
-from QUANTAXIS.QAFetch import QAQAWEB as QAWEB
-from QUANTAXIS.QAFetch import QAKQ as QAKQ
-from QUANTAXIS.QAFetch import QABaostock as QABaostock
+
+_BACKEND_MODULES = {
+    "QATushare": "QUANTAXIS.QAFetch.QATushare",
+    "QATdx": "QUANTAXIS.QAFetch.QATdx",
+    "QAThs": "QUANTAXIS.QAFetch.QAThs",
+    "QACL": "QUANTAXIS.QAFetch.QACrawler",
+    "QAEM": "QUANTAXIS.QAFetch.QAEastMoney",
+    "QAHexun": "QUANTAXIS.QAFetch.QAHexun",
+    "QAfinancial": "QUANTAXIS.QAFetch.QAfinancial",
+    "QAWEB": "QUANTAXIS.QAFetch.QAQAWEB",
+    "QAKQ": "QUANTAXIS.QAFetch.QAKQ",
+    "QABaostock": "QUANTAXIS.QAFetch.QABaostock",
+}
+
+
+def _load_backend(alias):
+    module = import_module(_BACKEND_MODULES[alias])
+    globals()[alias] = module
+    return module
+
+
+def __getattr__(name):
+    if name in _BACKEND_MODULES:
+        return _load_backend(name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 
 def use(package):
 
     if package in ["tushare", "ts"]:
-        return QATushare
+        return _load_backend("QATushare")
     elif package in ["tdx", "pytdx"]:
-        return QATdx
+        return _load_backend("QATdx")
     elif package in ["baostock", "bs", "bao"]:
-        return QABaostock
+        return _load_backend("QABaostock")
     elif package in ["ths", "THS"]:
-        return QAThs
+        return _load_backend("QAThs")
     elif package in ["HEXUN", "Hexun", "hexun"]:
-        return QAHexun
+        return _load_backend("QAHexun")
     elif package in ["QA"]:
-        return QAWEB
+        return _load_backend("QAWEB")
 
 
 def QA_fetch_get_stock_day(

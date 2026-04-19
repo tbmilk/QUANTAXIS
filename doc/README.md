@@ -1,7 +1,7 @@
 # QUANTAXIS 文档中心
 
 **版本**: 2.1.0-alpha2  
-**更新日期**: 2025-10-25  
+**更新日期**: 2026-04-17  
 **作者**: @yutiansut @quantaxis
 
 欢迎来到QUANTAXIS文档中心!这里提供完整的使用指南、API参考和最佳实践。
@@ -23,7 +23,9 @@
 
 ### 🔧 高级功能 (Advanced)
 - [资源管理器](advanced/resource-manager.md)
-- [Rust集成](advanced/rust-integration.md)
+- [Rust集成（qapro-rs）](advanced/rust-integration.md)
+- [qapro-rs 与 Python 对照说明](advanced/qapro-rs-status.md)
+- [实盘交易系统任务书](advanced/live_trading_taskbook.md)
 - [数据桥接](advanced/data-bridge.md)
 
 ### 🐳 部署指南 (Deployment)
@@ -63,6 +65,6 @@
 ---
 
 **维护者**: @yutiansut @quantaxis  
-**最后更新**: 2025-10-25
+**最后更新**: 2026-04-17
 
 [返回主页](../README.md)

@@ -67,7 +67,22 @@ impl From<Expr> for String {
         match expr {
             Expr::Selector(selector) => selector.to_string(),
             Expr::Value(value) => value.to_json().expect("to json"),
-            _ => todo!(),
+            Expr::Star => "*".to_string(),
+            Expr::Sql(_) => "(subquery)".to_string(),
+            Expr::Func(f) => match *f {
+                crate::parsers::sql::Func::Count(e) => format!("COUNT({})", String::from(e)),
+                crate::parsers::sql::Func::Upper(e) => format!("UPPER({})", String::from(e)),
+                crate::parsers::sql::Func::Lower(e) => format!("LOWER({})", String::from(e)),
+                crate::parsers::sql::Func::Ceil(e) => format!("CEIL({})", String::from(e)),
+                crate::parsers::sql::Func::Floor(e) => format!("FLOOR({})", String::from(e)),
+                crate::parsers::sql::Func::Round(e) => format!("ROUND({})", String::from(e)),
+            },
+            Expr::Add(l, r) => format!("({} + {})", String::from(*l), String::from(*r)),
+            Expr::Sub(l, r) => format!("({} - {})", String::from(*l), String::from(*r)),
+            Expr::Mul(l, r) => format!("({} * {})", String::from(*l), String::from(*r)),
+            Expr::Div(l, r) => format!("({} / {})", String::from(*l), String::from(*r)),
+            Expr::Rem(l, r) => format!("({} % {})", String::from(*l), String::from(*r)),
+            Expr::Exp(l, r) => format!("({} ^ {})", String::from(*l), String::from(*r)),
         }
     }
 }
@@ -82,7 +97,7 @@ impl FromStr for Expr {
                 eprint!("{}", err);
                 anyhow::bail!("failed")
             }
-            _ => todo!(),
+            Err(e) => anyhow::bail!("parse error: {:?}", e),
         }
     }
 }
@@ -103,8 +118,8 @@ impl Expr {
         match self {
             Self::Selector(path) => Self::Selector(path.expand_fullpath2(&env)),
             Expr::Value(_) => self.to_owned(),
-            Expr::Star => todo!(),
-            Expr::Func(_) => todo!(),
+            Expr::Star => Expr::Star,
+            Expr::Func(_) => self.to_owned(),
             Self::Add(left, right) => Self::Add(
                 Box::new((*left).expand_fullpath(&env)),
                 Box::new((*right).expand_fullpath(&env)),
@@ -129,7 +144,7 @@ impl Expr {
                 Box::new((*left).expand_fullpath(&env)),
                 Box::new((*right).expand_fullpath(&env)),
             ),
-            Expr::Sql(_) => todo!(),
+            Expr::Sql(_) => self.to_owned(),
         }
     }
 
@@ -137,15 +152,44 @@ impl Expr {
         match self.to_owned() {
             Self::Value(value) => value,
             Self::Selector(selector) => selector.evaluate(&env),
-            Self::Star => todo!(),
-            Self::Func(_) => todo!(),
-            Self::Sql(_) => todo!(),
-            Self::Add(box expr1, box expr2) => (expr1).eval(&env) + (expr2).eval(&env),
-            Self::Sub(box expr1, box expr2) => (expr1).eval(&env) - (expr2).eval(&env),
-            Self::Mul(box expr1, box expr2) => (expr1).eval(&env) * (expr2).eval(&env),
-            Self::Div(box expr1, box expr2) => (expr1).eval(&env) / (expr2).eval(&env),
-            Self::Rem(box expr1, box expr2) => (expr1).eval(&env) % (expr2).eval(&env),
-            Self::Exp(box expr1, box expr2) => (expr1).eval(&env).powf((expr2).eval(&env)),
+            Self::Star => PqlValue::default(),
+            Self::Func(f) => {
+                use crate::parsers::sql::Func;
+                use ordered_float::OrderedFloat;
+                match *f {
+                    Func::Count(_) => PqlValue::default(),
+                    Func::Upper(e) => match e.eval(env) {
+                        PqlValue::Str(s) => PqlValue::Str(s.to_uppercase()),
+                        v => v,
+                    },
+                    Func::Lower(e) => match e.eval(env) {
+                        PqlValue::Str(s) => PqlValue::Str(s.to_lowercase()),
+                        v => v,
+                    },
+                    Func::Ceil(e) => match e.eval(env) {
+                        PqlValue::Float(OrderedFloat(f)) => PqlValue::Int(f.ceil() as i64),
+                        PqlValue::Int(i) => PqlValue::Int(i),
+                        v => v,
+                    },
+                    Func::Floor(e) => match e.eval(env) {
+                        PqlValue::Float(OrderedFloat(f)) => PqlValue::Int(f.floor() as i64),
+                        PqlValue::Int(i) => PqlValue::Int(i),
+                        v => v,
+                    },
+                    Func::Round(e) => match e.eval(env) {
+                        PqlValue::Float(OrderedFloat(f)) => PqlValue::Int(f.round() as i64),
+                        PqlValue::Int(i) => PqlValue::Int(i),
+                        v => v,
+                    },
+                }
+            }
+            Self::Sql(_) => PqlValue::default(),
+            Self::Add(expr1, expr2) => (*expr1).eval(&env) + (*expr2).eval(&env),
+            Self::Sub(expr1, expr2) => (*expr1).eval(&env) - (*expr2).eval(&env),
+            Self::Mul(expr1, expr2) => (*expr1).eval(&env) * (*expr2).eval(&env),
+            Self::Div(expr1, expr2) => (*expr1).eval(&env) / (*expr2).eval(&env),
+            Self::Rem(expr1, expr2) => (*expr1).eval(&env) % (*expr2).eval(&env),
+            Self::Exp(expr1, expr2) => (*expr1).eval(&env).powf((*expr2).eval(&env)),
         }
     }
 
@@ -157,40 +201,37 @@ impl Expr {
                     selector.expand_fullpath2(&env).to_string()
                 }
             }
-            Expr::Add(box expr1, box expr2) => {
+            Expr::Add(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            Expr::Sub(box expr1, box expr2) => {
+            Expr::Sub(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            Expr::Mul(box expr1, box expr2) => {
+            Expr::Mul(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            Expr::Div(box expr1, box expr2) => {
+            Expr::Div(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            Expr::Rem(box expr1, box expr2) => {
+            Expr::Rem(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            Expr::Exp(box expr1, box expr2) => {
+            Expr::Exp(expr1, expr2) => {
                 let a = expr1.source_field_name_set(&env);
                 let b = expr2.source_field_name_set(&env);
                 a.union(&b).map(String::from).collect::<HashSet<_>>()
             }
-            _ => {
-                dbg!(&self);
-                todo!();
-            }
+            _ => HashSet::new(),
         }
     }
 
@@ -198,40 +239,40 @@ impl Expr {
         match self.to_owned() {
             Self::Value(_value) => None,
             Self::Selector(selector) => Some(selector),
-            Self::Star => todo!(),
-            Self::Func(_) => todo!(),
-            Self::Sql(_) => todo!(),
-            Self::Add(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Star => None,
+            Self::Func(_) => None,
+            Self::Sql(_) => None,
+            Self::Add(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
                 _ => None,
             },
-            Self::Sub(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Sub(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
                 _ => None,
             },
-            Self::Mul(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Mul(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
                 _ => None,
             },
-            Self::Div(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Div(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
                 _ => None,
             },
-            Self::Rem(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Rem(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
                 _ => None,
             },
-            Self::Exp(box expr1, box expr2) => match (expr1.to_path(), expr2.to_path()) {
+            Self::Exp(expr1, expr2) => match (expr1.to_path(), expr2.to_path()) {
                 (Some(s1), Some(s2)) => Some(s1.intersect(&s2)),
                 (Some(s1), _) => Some(s1),
                 (_, Some(s2)) => Some(s2),
@@ -270,7 +311,7 @@ mod tests {
     #[test]
     fn test_expr_calc() -> anyhow::Result<()> {
         let mut sql = Sql::default();
-        sql.select_clause = parser::clauses::select(r#"CALC 4 * a AS aa"#)?.1;
+        sql.select_clause = parser::clauses::calc(r#"CALC 4 * a AS aa"#)?.1;
         println!("{:#?}", sql.select_clause);
         sql.from_clause = parser::clauses::from("FROM 3 as a")?.1;
         let plan = LogicalPlan::from(sql);

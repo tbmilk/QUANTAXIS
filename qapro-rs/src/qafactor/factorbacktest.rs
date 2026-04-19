@@ -1,18 +1,15 @@
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+#![allow(non_camel_case_types, non_snake_case, dead_code)]
+use actix_web::{web, HttpResponse};
 
-use crate::qaenv::localenv::CONFIG;
 use uuid::Uuid;
 
 use crate::qaaccount::account::QA_Account;
 use crate::qaprotocol::mifi::qafastkline::QAKlineBase;
-use crate::qaprotocol::qifi::{
-    account::Trade, account::QIFI, func::from_serde_value, func::from_string,
-};
-use std::collections::{BTreeMap, HashMap};
+use crate::qaprotocol::qifi::account::QIFI;
+use std::collections::HashMap;
 extern crate serde;
 extern crate serde_json;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Serialize, Clone, Deserialize, Debug)]
 pub struct model {
@@ -114,7 +111,7 @@ impl QAModelWeights {
 
     fn next_day(&mut self, date: String) {
         // 用于处理下一天的函数(settle)
-        let commission = self.account.accounts.commission;
+        let _commission = self.account.accounts.commission;
         //println!("{:#?} ", commission);
         self.res.push(self.account.get_qifi_slice());
         self.account.settle();
@@ -125,27 +122,27 @@ impl QAModelWeights {
     }
 
     fn save_qifires(&mut self, slice: QIFI) {
-        let trading_day = slice.trading_day.clone();
+        let _trading_day = slice.trading_day.clone();
     }
 
     fn apply_weights(&mut self) {
-        /// apply_weights:
-        ///
-        /// 目前 use backtest model
-        ///
-        /// 1. get_data => Vec<QAKlineBase>
-        /// 2. get_daypanel =>  init daily panel
-        ///     ///账户 receive 最新市值
-        ///     /// 调仓
-        /// 3. day_switch
-        ///     账户 base on weights => 生成调仓订单
-        ///
-        ///     优先卖出订单 /  再进行买入部分
-        ///
-        /// 4. day_settle
-        ///
-        /// backtestmodel should add qifi support
-        ///
+        // apply_weights:
+        //
+        // 目前 use backtest model
+        //
+        // 1. get_data => Vec<QAKlineBase>
+        // 2. get_daypanel =>  init daily panel
+        //     ///账户 receive 最新市值
+        //     /// 调仓
+        // 3. day_switch
+        //     账户 base on weights => 生成调仓订单
+        //
+        //     优先卖出订单 /  再进行买入部分
+        //
+        // 4. day_settle
+        //
+        // backtestmodel should add qifi support
+        //
         let mut data = self.get_data_from_csv();
 
         let mut day_panel: Vec<&QAKlineBase> = vec![]; // data vessl for st
@@ -155,7 +152,7 @@ impl QAModelWeights {
                 let balance = self.account.get_balance();
                 // let money = self.account.money;
                 // let fp = self.account.get_floatprofit();
-                // let commission = self.account.accounts.commission;
+                // let _commission = self.account.accounts.commission;
                 // println!(
                 //     "dynamic balance: {:#?} money {:#?} floatprofit {:#?} commission {:#?}",
                 //     balance, money, fp, commission
@@ -205,13 +202,13 @@ impl QAModelWeights {
                                 vol = self.account.get_volume_long(i.code.as_str());
                                 //println!("not weight in current {:#?}", vol);
                             }
-                            self.account
+                            let _ = self.account
                                 .sell(i.code.as_str(), vol, i.datetime.as_str(), i.open);
                         }
                     }
                 }
                 for order in orderSchedule.iter() {
-                    self.account.buy(
+                    let _ = self.account.buy(
                         order.code.as_str(),
                         order.amount,
                         order.datetime.as_str(),
@@ -251,7 +248,7 @@ impl QAModelWeights {
 ///     "600010": 0.2
 ///     "000008": 0.1}
 /// }
-pub async fn submit_weights(item: web::Json<model>, srv: web::Data<()>) -> HttpResponse {
+pub async fn submit_weights(item: web::Json<model>, _srv: web::Data<()>) -> HttpResponse {
     //println!("{:#?}", item.codelist);
     //println!("{:#?}", item.codelist);
     let mut mw = QAModelWeights::generate(model {
@@ -284,6 +281,7 @@ pub async fn submit_weights(item: web::Json<model>, srv: web::Data<()>) -> HttpR
 mod tests {
     use super::*;
 
+    #[ignore = "requires data files"]
     #[test]
     fn test_new() {
         let mut mw = QAModelWeights::generate(model::default());

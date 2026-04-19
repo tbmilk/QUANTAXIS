@@ -1,9 +1,6 @@
 use crate::qaprotocol::mifi::market::BAR;
 use crate::qaprotocol::mifi::qafastkline::QAKlineBase;
-use crate::qaprotocol::qifi::account::QIFI;
-use chrono::format::ParseError;
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use serde::Serialize;
+use chrono::{DateTime, NaiveDateTime};
 
 #[derive(Debug, Clone)]
 pub struct QARealtimeResampler {
@@ -25,9 +22,9 @@ impl QARealtimeResampler {
 
     pub fn next(&mut self, bar: BAR) -> QAKlineBase {
         let cur_datetime: String = bar.datetime.clone();
-        let curstamp = Utc
-            .datetime_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
+        let curstamp = NaiveDateTime::parse_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
             .unwrap()
+            .and_utc()
             .timestamp();
 
         if self.bardata.startstamp == 0 {
@@ -39,7 +36,7 @@ impl QARealtimeResampler {
             );
         }
 
-        let min_f = cur_datetime[14..16].parse::<i32>().unwrap();
+        let _min_f = cur_datetime[14..16].parse::<i32>().unwrap();
         if self.bardata.startstamp + self.frq <= curstamp {
             let realstart: i64;
             let openstamp: i64;
@@ -54,17 +51,17 @@ impl QARealtimeResampler {
                 {
                     // starts with 9:00
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
 
                     realstart = openstamp + ((curstamp - openstamp) / self.frq) * self.frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / self.frq) * self.frq;
                 }
@@ -78,29 +75,29 @@ impl QARealtimeResampler {
                     // starts with 9:00
 
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / self.frq) * self.frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / self.frq) * self.frq;
                 }
             } else if dthour < 9 {
                 // night
-                openstamp = Utc
-                    .datetime_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 let x = &cur_datetime[10..19];
-                let fake_stamp = Utc
-                    .datetime_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                let fake_stamp = NaiveDateTime::parse_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 realstart = curstamp - fake_stamp
                     + openstamp
@@ -108,15 +105,15 @@ impl QARealtimeResampler {
             } else {
                 // night
                 let x = &cur_datetime[0..10];
-                openstamp = Utc
-                    .datetime_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
 
                 realstart = openstamp + ((curstamp - openstamp) / self.frq) * self.frq;
             }
             // println!("bar {:#?}", bar.datetime);
-            let real_starttime = Utc.timestamp(realstart, 0).to_string();
+            let real_starttime = DateTime::from_timestamp(realstart, 0).unwrap_or_default().to_string();
             // println!("calc real {:#?}", real_starttime);
             self.bardata.is_last = true;
             self.last = self.bardata.clone();
@@ -147,9 +144,9 @@ pub fn resample(code: String, raw_freq: i64, freq: i64, filepath: String) -> Vec
     for result in rdr.deserialize() {
         let bar: BAR = result.unwrap();
         let cur_datetime: String = bar.datetime.clone();
-        let curstamp = Utc
-            .datetime_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
+        let curstamp = NaiveDateTime::parse_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
             .unwrap()
+            .and_utc()
             .timestamp();
 
         if bardata.startstamp == 0 {
@@ -161,7 +158,7 @@ pub fn resample(code: String, raw_freq: i64, freq: i64, filepath: String) -> Vec
             );
         }
 
-        let min_f = cur_datetime[14..16].parse::<i32>().unwrap();
+        let _min_f = cur_datetime[14..16].parse::<i32>().unwrap();
         if bardata.startstamp + frq <= curstamp {
             let realstart: i64;
             let openstamp: i64;
@@ -176,17 +173,17 @@ pub fn resample(code: String, raw_freq: i64, freq: i64, filepath: String) -> Vec
                 {
                     // starts with 9:00
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
 
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 }
@@ -200,44 +197,44 @@ pub fn resample(code: String, raw_freq: i64, freq: i64, filepath: String) -> Vec
                     // starts with 9:00
 
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 }
             } else if dthour < 9 {
                 // night
-                openstamp = Utc
-                    .datetime_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 let x = &cur_datetime[10..19];
-                let fake_stamp = Utc
-                    .datetime_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                let fake_stamp = NaiveDateTime::parse_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 realstart =
                     curstamp - fake_stamp + openstamp + ((fake_stamp - openstamp) / frq) * frq;
             } else {
                 // night
                 let x = &cur_datetime[0..10];
-                openstamp = Utc
-                    .datetime_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
 
                 realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
             }
             // println!("bar {:#?}", bar.datetime);
-            let real_starttime = Utc.timestamp(realstart, 0).to_string();
+            let real_starttime = DateTime::from_timestamp(realstart, 0).unwrap_or_default().to_string();
             // println!("calc real {:#?}", real_starttime);
             bardata.is_last = true;
             ures.push(bardata.clone());
@@ -264,9 +261,9 @@ pub fn resample_db(hisdata: Vec<BAR>, freq: i64) -> Vec<QAKlineBase> {
     let mut ures = vec![];
     for bar in hisdata {
         let cur_datetime: String = bar.datetime.clone();
-        let curstamp = Utc
-            .datetime_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
+        let curstamp = NaiveDateTime::parse_from_str(cur_datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
             .unwrap()
+            .and_utc()
             .timestamp();
 
         if bardata.startstamp == 0 {
@@ -278,7 +275,7 @@ pub fn resample_db(hisdata: Vec<BAR>, freq: i64) -> Vec<QAKlineBase> {
             );
         }
 
-        let min_f = cur_datetime[14..16].parse::<i32>().unwrap();
+        let _min_f = cur_datetime[14..16].parse::<i32>().unwrap();
         if bardata.startstamp + frq <= curstamp {
             let realstart: i64;
             let openstamp: i64;
@@ -293,17 +290,17 @@ pub fn resample_db(hisdata: Vec<BAR>, freq: i64) -> Vec<QAKlineBase> {
                 {
                     // starts with 9:00
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
 
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 09:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 }
@@ -317,44 +314,44 @@ pub fn resample_db(hisdata: Vec<BAR>, freq: i64) -> Vec<QAKlineBase> {
                     // starts with 9:00
 
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 } else {
                     let x = &cur_datetime[0..10];
-                    openstamp = Utc
-                        .datetime_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                    openstamp = NaiveDateTime::parse_from_str(format!("{} 13:30:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                         .unwrap()
+                        .and_utc()
                         .timestamp();
                     realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
                 }
             } else if dthour < 9 {
                 // night
-                openstamp = Utc
-                    .datetime_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str("1970-01-01 21:00:00", "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 let x = &cur_datetime[10..19];
-                let fake_stamp = Utc
-                    .datetime_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                let fake_stamp = NaiveDateTime::parse_from_str(format!("1970-01-02 {}", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
                 realstart =
                     curstamp - fake_stamp + openstamp + ((fake_stamp - openstamp) / frq) * frq;
             } else {
                 // night
                 let x = &cur_datetime[0..10];
-                openstamp = Utc
-                    .datetime_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
+                openstamp = NaiveDateTime::parse_from_str(format!("{} 21:00:00", x).as_str(), "%Y-%m-%d %H:%M:%S")
                     .unwrap()
+                    .and_utc()
                     .timestamp();
 
                 realstart = openstamp + ((curstamp - openstamp) / frq) * frq;
             }
             // println!("bar {:#?}", bar.datetime);
-            let real_starttime = Utc.timestamp(realstart, 0).to_string();
+            let real_starttime = DateTime::from_timestamp(realstart, 0).unwrap_or_default().to_string();
             // println!("calc real {:#?}", real_starttime);
             bardata.is_last = true;
             ures.push(bardata.clone());

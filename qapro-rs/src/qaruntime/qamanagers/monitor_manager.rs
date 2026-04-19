@@ -2,15 +2,10 @@ use crate::qaconnector::mongo::mongoclient::QAMongoClient;
 use crate::qaenv::localenv::CONFIG;
 use crate::qaruntime::base::{Ack, AddMonitor, Instruct, QAOrderRsp, QifiRsp, ShowAllMonitor};
 use actix::prelude::*;
-use actix::{Actor, Addr, Context, Handler, Recipient};
-use amiquip::{
-    Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, ExchangeDeclareOptions,
-    ExchangeType, FieldTable, Publish, QueueDeclareOptions, Result,
-};
-use log::{error, info, warn};
-use serde_json::Value;
+use actix::{Actor, Context, Handler, Recipient};
+use amiquip::{Channel, Connection, ExchangeDeclareOptions, ExchangeType, Publish};
+use log::{error, info};
 use std::collections::HashMap;
-use std::thread;
 
 //订单推送
 pub struct MQPublish {
@@ -95,7 +90,7 @@ impl Handler<QifiRsp> for MonitorManager {
 
 impl Handler<QAOrderRsp> for MonitorManager {
     type Result = ();
-    fn handle(&mut self, msg: QAOrderRsp, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: QAOrderRsp, _ctx: &mut Context<Self>) -> Self::Result {
         for m in msg.data.iter() {
             let key = m.order.account_cookie.clone();
             let data = serde_json::to_string(&m.to_mt()).unwrap();
@@ -107,7 +102,7 @@ impl Handler<QAOrderRsp> for MonitorManager {
 
 impl Handler<AddMonitor> for MonitorManager {
     type Result = ();
-    fn handle(&mut self, msg: AddMonitor, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: AddMonitor, _ctx: &mut Context<Self>) -> Self::Result {
         self.monitor_num -= 1;
         info!(
             "[{}] register; {} not yet",
@@ -119,7 +114,7 @@ impl Handler<AddMonitor> for MonitorManager {
 
 impl Handler<Instruct> for MonitorManager {
     type Result = ();
-    fn handle(&mut self, msg: Instruct, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Instruct, _ctx: &mut Context<Self>) -> Self::Result {
         for (k, r) in &self.monitor_pool {
             if msg.target.contains(k) {
                 match r.try_send(msg.clone()) {
@@ -137,7 +132,7 @@ impl Handler<Instruct> for MonitorManager {
 
 impl Handler<Ack> for MonitorManager {
     type Result = ();
-    fn handle(&mut self, msg: Ack, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Ack, _ctx: &mut Context<Self>) -> Self::Result {
         match serde_json::to_string(&msg) {
             Ok(data) => {
                 self.ack_handler
@@ -152,7 +147,7 @@ impl Handler<Ack> for MonitorManager {
 
 impl Handler<ShowAllMonitor> for MonitorManager {
     type Result = ();
-    fn handle(&mut self, msg: ShowAllMonitor, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, _msg: ShowAllMonitor, _ctx: &mut Self::Context) -> Self::Result {
         info!("Monitors: {:#?}", self.monitor_pool.keys());
     }
 }

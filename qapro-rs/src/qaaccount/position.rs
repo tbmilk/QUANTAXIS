@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types, dead_code)]
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -86,7 +87,7 @@ impl QA_Postions {
         account_cookie: String,
         portfolio_cookie: String,
     ) -> Self {
-        let mut preset: CodePreset = MarketPreset::new().get(code.as_ref());
+        let preset: CodePreset = MarketPreset::new().get(code.as_ref());
 
         let pos = Self {
             preset,
@@ -221,6 +222,54 @@ impl QA_Postions {
             pos.update_pos(open_price_short, volume_short_today, -2);
         }
         pos
+    }
+
+    pub fn from_qifi_position(
+        position: &Position,
+        account_cookie: String,
+        portfolio_cookie: String,
+    ) -> Self {
+        Self {
+            preset: MarketPreset::new().get(position.instrument_id.as_ref()),
+            code: position.instrument_id.clone(),
+            instrument_id: position.instrument_id.clone(),
+            user_id: if position.user_id.is_empty() {
+                account_cookie.clone()
+            } else {
+                position.user_id.clone()
+            },
+            portfolio_cookie,
+            username: account_cookie.clone(),
+            position_id: "".to_string(),
+            account_cookie,
+            frozen: position.volume_long_frozen + position.volume_short_frozen,
+            name: "".to_string(),
+            spms_id: "".to_string(),
+            oms_id: "".to_string(),
+            market_type: adjust_market(position.instrument_id.as_ref()),
+            exchange_id: position.exchange_id.clone(),
+            lastupdatetime: "".to_string(),
+            volume_long_today: position.volume_long_today,
+            volume_long_his: position.volume_long_his,
+            volume_short_today: position.volume_short_today,
+            volume_short_his: position.volume_short_his,
+            volume_long_frozen_today: position.volume_long_frozen_today,
+            volume_long_frozen_his: position.volume_long_frozen_his,
+            volume_short_frozen_today: position.volume_short_frozen_today,
+            volume_short_frozen_his: position.volume_short_frozen_his,
+            margin_long: position.margin_long,
+            margin_short: position.margin_short,
+            position_price_long: position.position_price_long,
+            position_cost_long: position.position_cost_long,
+            position_price_short: position.position_price_short,
+            position_cost_short: position.position_cost_short,
+            open_price_long: position.open_price_long,
+            open_cost_long: position.open_cost_long,
+            open_price_short: position.open_price_short,
+            open_cost_short: position.open_cost_short,
+            lastest_price: position.last_price,
+            lastest_datetime: "".to_string(),
+        }
     }
 
     pub fn get_price_tick(&mut self) -> f64 {

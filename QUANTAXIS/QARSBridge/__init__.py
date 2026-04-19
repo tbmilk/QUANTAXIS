@@ -1,124 +1,147 @@
 """
-QUANTAXIS/QARSBridge - QARS2 Rust核心桥接层
+QUANTAXIS/QARSBridge —— Rust 高性能组件桥接层
 
-提供Python友好的接口访问QARS2 Rust高性能组件:
-- QARSAccount: Rust高性能QIFI账户 (100x加速)
-- QARSBacktest: Rust回测引擎 (10x加速)
-- QARSData: Polars高性能数据结构
-- has_qars_support(): 检测QARS2是否可用
+提供与 qars2 完全兼容的 Python API：
+  - QARSAccount:  Rust 高性能 QIFI 账户（100x 加速）
+  - QARSBacktest: Rust 回测引擎（10x 加速）
+  - QADataFrame:  高性能数据帧（指标计算、Arrow 转换）
+  - ma/ema/macd/rsi/boll/atr/kdj/obv 等向量化指标函数
+  - parallel_apply: 多标的并行指标计算
+  - from_arrow/process_arrow: PyArrow 互操作
 
-示例:
-    >>> from QUANTAXIS.QARSBridge import QARSAccount, has_qars_support
+使用示例：
+    >>> from QUANTAXIS.QARSBridge import ma, ema, macd, QADataFrame
     >>>
-    >>> if has_qars_support():
-    >>>     # 使用Rust高性能账户
-    >>>     account = QARSAccount("test", init_cash=1000000)
-    >>> else:
-    >>>     # 使用Python回退实现
-    >>>     from QUANTAXIS.QIFI import QIFI_Account
-    >>>     account = QIFI_Account("test")
+    >>> ma5 = ma(close_list, 5)                    # list[float]
+    >>> result = macd(close_list)                  # dict(macd/signal/histogram)
+    >>>
+    >>> df = QADataFrame(stock_df)                 # pandas DataFrame
+    >>> df.boll(20)                                # dict(upper/mid/lower)
+    >>>
+    >>> from QUANTAXIS.QARSBridge import QARSAccount
+    >>> account = QARSAccount("my_account", init_cash=1_000_000)
+    >>> account.buy("000001", 10.5, "2025-01-01", 100)
 
 @yutiansut @quantaxis
 """
 
-__version__ = "2.1.0.alpha1"
-__all__ = [
-    'QARSAccount',
-    'QARSBacktest',
-    'has_qars_support',
-    'HAS_QARS',
-]
+__version__ = "2.1.0.alpha2"
 
-# ============================================================================
-# 检测QARS2是否可用
-# ============================================================================
+# ──────────────────────────────────────────────────────────────────────────────
+# 检测 Rust 后端
+# ──────────────────────────────────────────────────────────────────────────────
 try:
-    import qars3
-    from qars3 import QA_QIFIAccount as _RustQIFIAccount
+    import qapro_rs as _qapro_rs
     HAS_QARS = True
-    QARS_VERSION = getattr(qars3, '__version__', 'unknown')
+    QARS_VERSION = getattr(_qapro_rs, '__version__', 'unknown')
 except ImportError:
+    _qapro_rs = None
     HAS_QARS = False
     QARS_VERSION = None
-    _RustQIFIAccount = None
-    import warnings
-    warnings.warn(
-        "QARS2 Rust核心未安装，将使用纯Python实现。\n"
-        "安装方法:\n"
-        "  pip install quantaxis[rust]\n"
-        "或者:\n"
-        "  cd /home/quantaxis/qars2 && pip install -e .\n"
-        "\n"
-        "性能对比: Rust版本比Python版本快10-100倍",
-        ImportWarning,
-        stacklevel=2
-    )
+
+# 兼容旧版 qars3 检测
+_has_qars3 = False
+try:
+    import qars3 as _qars3
+    _has_qars3 = True
+    if not HAS_QARS:
+        HAS_QARS = True
+        QARS_VERSION = getattr(_qars3, '__version__', 'unknown')
+except ImportError:
+    _qars3 = None
 
 
 def has_qars_support() -> bool:
-    """
-    检查是否有QARS2 Rust核心支持
-
-    返回:
-        bool: True如果QARS2可用
-
-    示例:
-        >>> if has_qars_support():
-        >>>     print("Rust核心可用，将获得极致性能")
-        >>> else:
-        >>>     print("使用Python实现，建议安装QARS2")
-    """
+    """检查是否有 Rust 核心支持（qapro_rs 或 qars3）"""
     return HAS_QARS
 
 
-# ============================================================================
-# 导入桥接类
-# ============================================================================
-if HAS_QARS:
-    # 使用Rust实现
-    from .qars_account import QARSAccount
-    from .qars_backtest import QARSBacktest
-
-    # 打印性能提示
-    import sys
-    if not sys.flags.quiet:
-        print(f"✨ QARS2 Rust核心已启用 (版本 {QARS_VERSION})")
-        print(f"   性能提升: 账户操作100x, 回测10x, 数据处理5-10x")
-
-else:
-    # 提供Python fallback (QIFI_Account可用; QARSBacktest需qars3)
-    from ..QIFI.QifiAccount import QIFI_Account as QARSAccount
-
-    class QARSBacktest:
-        """占位类: 回测需安装qars3。使用 pip install quantaxis[rust]"""
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "QARSBacktest 需要 qars3。安装: pip install quantaxis[rust]"
-            )
-
-    import sys
-    if not sys.flags.quiet:
-        print("⚠ 使用Python实现 (未检测到QARS2)")
-        print("  建议: pip install quantaxis[rust] 获得100x性能提升")
-
-
-# ============================================================================
-# 版本信息
-# ============================================================================
 def get_version_info() -> dict:
-    """
-    获取QARS桥接层版本信息
-
-    返回:
-        dict: 版本信息字典
-
-    示例:
-        >>> info = get_version_info()
-        >>> print(f"QARS支持: {info['has_qars']}")
-    """
+    """获取 QARS 桥接层版本信息"""
     return {
         'bridge_version': __version__,
         'has_qars': HAS_QARS,
         'qars_version': QARS_VERSION,
         'backend': 'Rust' if HAS_QARS else 'Python',
+        'has_qapro_rs': _qapro_rs is not None,
+        'has_qars3': _has_qars3,
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 数据处理 API（向量化指标、QADataFrame、Arrow、并行）
+# ──────────────────────────────────────────────────────────────────────────────
+from .qars_data import (    # noqa: E402, F401
+    QADataFrame,
+    ma, ema, macd, rsi, boll, atr, kdj, obv,
+    hhv, llv, roc, momentum, returns, volatility, correlation,
+    parallel_apply,
+    from_arrow, process_arrow,
+)
+
+# ──────────────────────────────────────────────────────────────────────────────
+# 延迟加载重量级/可选组件
+# ──────────────────────────────────────────────────────────────────────────────
+def _load_qars_account():
+    if _has_qars3:
+        from .qars_account import QARSAccount
+        return QARSAccount
+    if _qapro_rs is not None:
+        from .qars_account_rs import QARSAccount
+        return QARSAccount
+    try:
+        from ..QIFI.QifiAccount import QIFI_Account
+    except ImportError as exc:
+        raise ImportError(
+            "QARSAccount Python 回退实现依赖 QIFI/pandas/pymongo 等组件。"
+            " 如仅需桥接层，请安装 quantaxis 基础依赖；如需 Rust 后端，请安装 quantaxis[rust]。"
+        ) from exc
+    return QIFI_Account
+
+
+def _load_qars_backtest():
+    if _has_qars3:
+        from .qars_backtest import QARSBacktest
+        return QARSBacktest
+
+    class _UnavailableQARSBacktest:
+        def __init__(self, *args, **kwargs):
+            raise ImportError("QARSBacktest 需要 qars3。安装: pip install quantaxis[rust]")
+
+    return _UnavailableQARSBacktest
+
+
+def _load_risk_event_consumer():
+    from .redis_consumer import RiskEventConsumer
+    return RiskEventConsumer
+
+
+def __getattr__(name):
+    if name == 'QARSAccount':
+        value = _load_qars_account()
+    elif name == 'QARSBacktest':
+        value = _load_qars_backtest()
+    elif name == 'RiskEventConsumer':
+        value = _load_risk_event_consumer()
+    else:
+        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    globals()[name] = value
+    return value
+
+# ──────────────────────────────────────────────────────────────────────────────
+__all__ = [
+    # 账户与回测
+    'QARSAccount',
+    'QARSBacktest',
+    # 数据帧
+    'QADataFrame',
+    # 向量化指标
+    'ma', 'ema', 'macd', 'rsi', 'boll', 'atr', 'kdj', 'obv',
+    'hhv', 'llv', 'roc', 'momentum', 'returns', 'volatility', 'correlation',
+    # 并行与 Arrow
+    'parallel_apply', 'from_arrow', 'process_arrow',
+    # 工具
+    'RiskEventConsumer',
+    'has_qars_support', 'get_version_info',
+    'HAS_QARS', 'QARS_VERSION',
+]

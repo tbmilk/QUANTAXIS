@@ -270,8 +270,9 @@ class QARSAccount:
         # 转换为DataFrame
         positions_list = []
         for code, pos in positions_dict.items():
-            pos['code'] = code
-            positions_list.append(pos)
+            row = dict(pos)
+            row['code'] = code
+            positions_list.append(row)
 
         return pd.DataFrame(positions_list)
 
@@ -378,6 +379,15 @@ class QARSAccount:
         init_cash = qifi_dict.get('accounts', {}).get('pre_balance', 1000000.0)
         environment = qifi_dict.get('environment', 'backtest')
 
+        has_state = any(qifi_dict.get(key) for key in (
+            'positions', 'orders', 'trades', 'events'
+        ))
+        if has_state:
+            raise NotImplementedError(
+                "QARSAccount.from_qifi() 目前无法恢复持仓/订单/成交等完整状态，"
+                "拒绝静默导入以避免账户状态丢失。"
+            )
+
         # 创建账户
         account = cls(
             account_cookie=account_cookie,
@@ -385,9 +395,6 @@ class QARSAccount:
             init_cash=init_cash,
             environment=environment
         )
-
-        # TODO: 恢复持仓和订单状态
-        # 这需要Rust侧实现from_qifi方法
 
         return account
 

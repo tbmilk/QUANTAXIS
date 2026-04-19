@@ -147,6 +147,7 @@ class QA_Order():
         '''
 
         self.price = price
+        self.date = None
         self.datetime = None
 
         # 🛠todo 移动到 Util 类中 时间处理函数
@@ -439,13 +440,18 @@ class QA_Order():
         self._status = ORDER_STATUS.SETTLED
 
     def get(self, key, exception=None):
-        try:
-            if key is None:
-                print("key is none , return none!")
-                return None
-            return eval('self.{}'.format(key))
-        except Exception as e:
+        if key is None:
+            return None
+
+        if not isinstance(key, str):
             return exception
+
+        value = self
+        for attr in key.split('.'):
+            if not hasattr(value, attr):
+                return exception
+            value = getattr(value, attr)
+        return value
 
     # 🛠todo 建议取消，直接调用var
 
@@ -749,7 +755,7 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
         else:
             if self.order_list[order.order_id
                                ].trade_amount != order.trade_amount:
-                slef.order_list[order.order_id] = order
+                self.order_list[order.order_id] = order
                 return True
             else:
                 return False

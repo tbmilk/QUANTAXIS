@@ -1,0 +1,72 @@
+name: Minimal CI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  python-smoke:
+    name: Python Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Compile Python sources
+        run: |
+          python -m compileall QUANTAXIS test/test_qifi_account_regressions.py test/test_cli_smoke.py
+
+      - name: Run Python regression suite
+        run: |
+          PYTHONPATH=. python -m unittest discover -s test -p 'test_qifi_account_regressions.py' -q
+          PYTHONPATH=. python -m unittest discover -s test -p 'test_cli_smoke.py' -q
+          PYTHONPATH=. python -m unittest discover -s test -p 'test_indicator_alignment.py' -q
+          PYTHONPATH=. python -m unittest discover -s test -p 'test_qifi_roundtrip.py' -q
+
+  rust-smoke:
+    name: Rust Smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust library check
+        run: |
+          RUSTFLAGS='-Awarnings' cargo check --manifest-path qapro-rs/Cargo.toml --lib --features openctp
+
+      - name: Rust examples check
+        run: |
+          cargo check --manifest-path qapro-rs/Cargo.toml --example screen_multitimeframe_backtest
+          RUSTFLAGS='-Awarnings' cargo check --manifest-path qapro-rs/Cargo.toml --example openctp_md_gateway --features openctp
+
+      - name: Rust targeted regressions
+        run: |
+          cargo test --manifest-path qapro-rs/Cargo.toml test_parse_message_prefers_instrument_id --lib
+          cargo test --manifest-path qapro-rs/Cargo.toml test_qifi_reload_preserves_exchange_scoped_position_fields --lib
+          cargo test --manifest-path qapro-rs/Cargo.toml test_parse_kline_payload_accepts_valid_message --lib
+          cargo test --manifest-path qapro-rs/Cargo.toml test_from_string_rejects_invalid_json --lib
+
+      - name: Rust C2/C3 cross-language regression tests
+        run: |
+          cargo test --manifest-path qapro-rs/Cargo.toml qaindicator::regression_tests --lib
+          cargo test --manifest-path qapro-rs/Cargo.toml qadatastruct::mdsnapshot::tests --lib

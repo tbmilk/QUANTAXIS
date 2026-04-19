@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /*
 此处描述了quantaxis-rs标准的期货/股票/数据结构
 */

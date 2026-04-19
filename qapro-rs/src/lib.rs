@@ -1,4 +1,3 @@
-#![feature(box_patterns)]
 pub mod qaaccount;
 pub mod qaconnector;
 pub mod qadata;
@@ -20,3 +19,24 @@ pub mod qafactor;
 pub mod qahandlers;
 
 pub mod parsers;
+
+pub mod qarisk;
+pub mod qaportfolio;
+pub mod qaexec;
+
+pub mod qaindicator;
+pub mod qatrader;
+
+// ─── PyO3 Python 绑定（可选 feature） ────────────────────────────────────────
+#[cfg(feature = "pyo3-bindings")]
+pub mod qapyo3;
+
+#[cfg(feature = "pyo3-bindings")]
+use pyo3::prelude::*;
+
+/// Python 模块入口（`maturin develop --features pyo3-bindings`）
+#[cfg(feature = "pyo3-bindings")]
+#[pymodule]
+fn qapro_rs(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
+    qapyo3::qapro_rs_module(_py, m)
+}

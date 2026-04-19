@@ -13,7 +13,7 @@ use nom::{
     multi::separated_list0,
     number::complete::double,
     sequence::{delimited, preceded, separated_pair, terminated},
-    IResult, Parser,
+    IResult,
 };
 
 use crate::parsers::value::PqlValue;

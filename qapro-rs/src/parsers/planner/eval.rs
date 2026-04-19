@@ -1,6 +1,4 @@
 pub use crate::parsers::planner::LogicalPlan;
-pub use crate::parsers::sql::clause::Limit;
-pub use crate::parsers::sql::clause::OrderBy;
 use crate::parsers::sql::Env;
 use crate::parsers::sql::Expr;
 use crate::parsers::sql::Sql;

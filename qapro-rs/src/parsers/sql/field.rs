@@ -21,7 +21,7 @@ impl FromStr for Field {
                 eprint!("{:#?}", err);
                 anyhow::bail!("failed")
             }
-            _ => todo!(),
+            Err(e) => anyhow::bail!("parse error: {:?}", e),
         }
     }
 }
@@ -45,7 +45,7 @@ impl Field {
         } else {
             let alias = match &self.expr {
                 Expr::Selector(selector) => selector.to_vec().last().unwrap().to_string(),
-                _ => todo!(),
+                other => String::from(other.to_owned()),
             };
             (alias, self.expr)
         }

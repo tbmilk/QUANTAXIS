@@ -18,7 +18,12 @@ impl Filter {
                         let restricted = value.restrict3(&cond, 0).expect("restricted value");
                         Expr::from(restricted)
                     }
-                    _ => todo!(),
+                    other => {
+                        // 非 Value 类型（Selector / 算术表达式等）先求值再过滤
+                        let value = other.eval(env);
+                        let restricted = value.restrict3(&cond, 0).unwrap_or_default();
+                        Expr::from(restricted)
+                    }
                 };
                 env.insert("", &data);
             };
@@ -27,7 +32,7 @@ impl Filter {
 
     pub fn expand_fullpath(self, env: &Env) -> Self {
         match self.0 {
-            Some(box cond) => Self(Some(Box::new(cond.expand_fullpath(env)))),
+            Some(cond) => Self(Some(Box::new((*cond).clone().expand_fullpath(env)))),
             None => Self(None),
         }
     }
@@ -65,7 +70,8 @@ impl PqlValue {
                         }
                     }
                     Some(None) => {
-                        todo!()
+                        // 路径已到叶节点但条件尚未满足，过滤掉
+                        None
                     }
                     _ => None,
                 };
@@ -94,7 +100,8 @@ impl PqlValue {
                             None
                         }
                     } else {
-                        todo!()
+                        // 非字符串类型无法做 LIKE 匹配，跳过
+                        None
                     }
                 }
             },

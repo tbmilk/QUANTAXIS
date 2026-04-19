@@ -124,20 +124,24 @@ QAMarket模块的订单/持仓结构完全兼容QIFI (QuantAxis Interoperable Fi
 v2.1.0+ (2025)
 """
 
-# 市场预设
-from QUANTAXIS.QAMarket.market_preset import MARKET_PRESET
+from importlib import import_module
 
-# 订单管理
-from QUANTAXIS.QAMarket.QAOrder import (
-    QA_Order,
-    QA_OrderQueue
-)
+_EXPORTS = {
+    'MARKET_PRESET': ('QUANTAXIS.QAMarket.market_preset', 'MARKET_PRESET'),
+    'QA_Order': ('QUANTAXIS.QAMarket.QAOrder', 'QA_Order'),
+    'QA_OrderQueue': ('QUANTAXIS.QAMarket.QAOrder', 'QA_OrderQueue'),
+    'QA_Position': ('QUANTAXIS.QAMarket.QAPosition', 'QA_Position'),
+    'QA_PMS': ('QUANTAXIS.QAMarket.QAPosition', 'QA_PMS'),
+}
 
-# 持仓管理
-from QUANTAXIS.QAMarket.QAPosition import (
-    QA_Position,
-    QA_PMS
-)
+
+def __getattr__(name):
+    if name not in _EXPORTS:
+        raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
+    module_name, attr_name = _EXPORTS[name]
+    value = getattr(import_module(module_name), attr_name)
+    globals()[name] = value
+    return value
 
 __all__ = [
     # 市场预设

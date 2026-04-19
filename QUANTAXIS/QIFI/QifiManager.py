@@ -2,15 +2,9 @@ import datetime
 import re
 import warnings
 
-import empyrical as em
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-with warnings.catch_warnings():
-    warnings.filterwarnings('ignore', message='.*zipline.assets.*not found.*')
-    import pyfolio as pf
 import pymongo
-import QUANTAXIS as QA
 from qaenv import mongo_ip
 
 #mongo_ip = '192.168.2.117'
@@ -23,6 +17,23 @@ def mergex(dict1, dict2):
 
 def promise_list(value):
     return value if isinstance(value, list) else [value]
+
+
+def _load_quantaxis():
+    import QUANTAXIS as QA
+    return QA
+
+
+def _load_pyfolio():
+    with warnings.catch_warnings():
+        warnings.filterwarnings('ignore', message='.*zipline.assets.*not found.*')
+        import pyfolio as pf
+    return pf
+
+
+def _load_matplotlib():
+    import matplotlib.pyplot as plt
+    return plt
 
 
 class QA_QIFIMANAGER():
@@ -44,8 +55,8 @@ class QA_QIFIMANAGER():
         self.account_cookie = account_cookie
         self.assets = self.get_historyassets()
         self.trade = self.get_historytrade()
-        self.assets_start = self.assets.index[0]
-        self.assets_end = self.assets.index[-1]
+        self.assets_start = self.assets.index[0] if not self.assets.empty else None
+        self.assets_end = self.assets.index[-1] if not self.assets.empty else None
         self.benchmark_code = '000300'
         self.benchmark_assets = self.get_benchmark_assets(
             self.benchmark_code, self.assets_start, self.assets_end)
@@ -54,10 +65,19 @@ class QA_QIFIMANAGER():
         return f"{self.account_cookie}- start: {self.assets_start} - end: {self.assets_end}- benchmark: {self.benchmark_code}"
 
     def get_benchmark_assets(self, code, start, end):
-        return QA.QA_fetch_index_day_adv(code, start, end).data.reset_index(1).close
+        if start is None or end is None:
+            return pd.Series(dtype='float64')
+        QA = _load_quantaxis()
+        benchmark = QA.QA_fetch_index_day_adv(code, start, end)
+        if benchmark is None:
+            return pd.Series(dtype='float64')
+        return benchmark.data.reset_index(1).close
 
     def set_benchmark_assets(self, assets):
-        self.benchmark_assets = assets.loc[self.assets_start, self.assets_end]
+        if self.assets_start is None or self.assets_end is None:
+            self.benchmark_assets = pd.Series(dtype='float64')
+        else:
+            self.benchmark_assets = assets.loc[self.assets_start:self.assets_end]
 
     def change_database(self, database_name, collection_name):
 
@@ -79,7 +99,7 @@ class QA_QIFIMANAGER():
         returns = self.benchmark_assets.pct_change()
         try:
             returns.index = returns.index
-        except:
+        except (AttributeError, TypeError):
             pass
         return returns
 
@@ -98,16 +118,17 @@ class QA_QIFIMANAGER():
         b = [(item['accounts']['balance'], item['trading_day']) for item in self.database.find(
             {'account_cookie': self.account_cookie}, {'_id': 0, 'accounts': 1, 'trading_day': 1})]
         res = pd.DataFrame(b, columns=['balance', 'trading_day']).dropna()
-
-
-        print(res.trading_day[0])
-        res = res[res.trading_day.apply(lambda x: x!='')]
-        res = res.assign(datetime=pd.to_datetime(
-            res['trading_day']), balance=res.balance.apply(round, 2)).dropna().set_index('datetime').sort_index()
+        if res.empty:
+            return pd.Series(name=self.account_cookie, dtype='float64')
+        res = res[res.trading_day.astype(str).ne('')]
+        if res.empty:
+            return pd.Series(name=self.account_cookie, dtype='float64')
+        res = res.assign(
+            datetime=pd.to_datetime(res['trading_day']),
+            balance=res.balance.round(2)
+        ).dropna().set_index('datetime').sort_index()
         res = res.balance
         res.name = self.account_cookie
-
-        print(res)
         return res.bfill().ffill().sort_index().loc[start:end]
 
     def get_historytrade(self,):
@@ -117,7 +138,8 @@ class QA_QIFIMANAGER():
         for ix in b:
             i.extend(list(ix))
         res = pd.DataFrame(i)
-        # print(res)
+        if res.empty:
+            return pd.DataFrame()
         res = res.assign(account_cookie=res['user_id'], code=res['instrument_id'], tradetime=res['trade_date_time'].apply(
             lambda x:  datetime.datetime.fromtimestamp(x/1000000000))).set_index(['tradetime', 'code']).sort_index()
         return res.drop_duplicates().sort_index()
@@ -129,10 +151,13 @@ class QA_QIFIMANAGER():
         return 0 if np.isnan(a) else a
 
     def show_perf_stats(self, live_start_date=None):
+        pf = _load_pyfolio()
         pf.show_perf_stats(self.returns, self.benchmark_returns,
                            live_start_date=live_start_date)
 
     def create_returns_tear_sheet(self, live_start_date=None):
+        pf = _load_pyfolio()
+        plt = _load_matplotlib()
         pf.create_returns_tear_sheet(
             self.returns,  benchmark_rets=self.benchmark_returns, live_start_date=live_start_date)
         plt.show()
@@ -174,9 +199,12 @@ class QA_QIFISMANAGER():
 
     def get_portfolio_panel(self, portfolio) -> pd.DataFrame:
         r = self.get_portfolio_account(portfolio)
-        
+
         rp = [self.database.find_one({'account_cookie': i}, {
                                      "accounts": 1, 'trading_day': 1, '_id': 0}) for i in r]
+        rp = [item for item in rp if item and item.get('accounts')]
+        if not rp:
+            return pd.DataFrame()
         return pd.DataFrame([mergex(i['accounts'], {'trading_day': i['trading_day']}) for i in rp]).query('user_id in {}'.format(r))
 
     def get_allaccountname(self) -> list:
@@ -186,8 +214,13 @@ class QA_QIFISMANAGER():
         b = [(item['accounts']['balance'], item['trading_day']) for item in self.database.find(
             {'account_cookie': account_cookie}, {'_id': 0, 'accounts': 1, 'trading_day': 1})]
         res = pd.DataFrame(b, columns=['balance', 'trading_day'])
+        if res.empty:
+            return pd.Series(name=account_cookie, dtype='float64')
+        res = res[res.trading_day.astype(str).ne('')]
+        if res.empty:
+            return pd.Series(name=account_cookie, dtype='float64')
         res = res.assign(datetime=pd.to_datetime(
-            res['trading_day']), balance=res.balance.apply(round, 2)).set_index('datetime').sort_index()
+            res['trading_day']), balance=res.balance.round(2)).set_index('datetime').sort_index()
         res = res.balance
         res.name = account_cookie
 
@@ -216,7 +249,8 @@ class QA_QIFISMANAGER():
         for ix in b:
             i.extend(list(ix))
         res = pd.DataFrame(i)
-        # print(res)
+        if res.empty:
+            return pd.DataFrame()
         res = res.assign(account_cookie=res['user_id'], code=res['instrument_id'], tradetime=res['trade_date_time'].apply(
             lambda x:  datetime.datetime.fromtimestamp(x/1000000000))).set_index(['tradetime', 'code']).sort_index()
         return res.drop_duplicates().sort_index()
@@ -228,6 +262,8 @@ class QA_QIFISMANAGER():
         for ix in b:
             i.extend(list(ix))
         res = pd.DataFrame(i)
+        if res.empty:
+            return pd.DataFrame()
         res = res.assign(account_cookie=res['user_id'], code=res['instrument_id'], ordertime=res['insert_date_time'].apply(
             lambda x:  datetime.datetime.fromtimestamp(x/1000000000))).set_index(['ordertime', 'code']).sort_index()
         return res.drop_duplicates().sort_index()

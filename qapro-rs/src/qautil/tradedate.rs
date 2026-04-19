@@ -1,6 +1,5 @@
-use chrono::Local;
-use chrono::TimeZone;
-use std::ops::Index;
+#![allow(non_snake_case)]
+use chrono::{Local, TimeZone};
 
 pub struct QATradeDate {
     pub(crate) trade_date: Vec<i32>,
@@ -9,7 +8,7 @@ pub struct QATradeDate {
 pub fn QA_util_date_to_string(date: i32) -> String {
     let year = date / 10000;
     let month = (date - year * 10000) / 100;
-    let day = (date - year * 10000 - month * 100);
+    let day = date - year * 10000 - month * 100;
     let month_1 = if month < 10 {
         format!("0{}", month)
     } else {
@@ -1004,7 +1003,7 @@ impl QATradeDate {
     pub fn to_string(&mut self, date: i32) -> String {
         let year = date / 10000;
         let month = (date - year * 10000) / 100;
-        let day = (date - year * 10000 - month * 100);
+        let day = date - year * 10000 - month * 100;
         let month_1 = if month < 10 {
             format!("0{}", month)
         } else {
@@ -1044,42 +1043,37 @@ impl QATradeDate {
 
         let u = self.trade_date.iter().position(|x| x >= &ur).unwrap();
 
-        let mut res = 0;
-        if self.trade_date.contains(&ur) {
-            res = self.trade_date.get_mut(u + 1).unwrap().to_owned();
+        let res = if self.trade_date.contains(&ur) {
+            self.trade_date.get_mut(u + 1).unwrap().to_owned()
         } else {
-            res = self.trade_date.get_mut(u).unwrap().to_owned();
-        }
+            self.trade_date.get_mut(u).unwrap().to_owned()
+        };
         self.to_string(res)
     }
     pub fn get_last_day(&mut self, date: &str) -> String {
         let ur = self.to_i32(date);
         let u = self.trade_date.iter().position(|x| x >= &ur).unwrap();
-        let mut res = 0;
-        res = self.trade_date.get_mut(u - 1).unwrap().to_owned();
+        let res = self.trade_date.get_mut(u - 1).unwrap().to_owned();
         self.to_string(res)
     }
     pub fn get_next_n_day(&mut self, date: &str, n: i32) -> String {
         let ur = self.to_i32(date);
 
         let u = self.trade_date.iter().position(|x| x >= &ur).unwrap();
-        let mut res = 0;
-        if self.trade_date.contains(&ur) {
-            res = self.trade_date.get_mut(u + n as usize).unwrap().to_owned();
+        let res = if self.trade_date.contains(&ur) {
+            self.trade_date.get_mut(u + n as usize).unwrap().to_owned()
         } else {
-            res = self
-                .trade_date
+            self.trade_date
                 .get_mut(u + n as usize - 1)
                 .unwrap()
-                .to_owned();
-        }
+                .to_owned()
+        };
         self.to_string(res)
     }
     pub fn get_last_n_day(&mut self, date: &str, n: i32) -> String {
         let ur = self.to_i32(date);
         let u = self.trade_date.iter().position(|x| x >= &ur).unwrap();
-        let mut res = 0;
-        res = self.trade_date.get_mut(u - n as usize).unwrap().to_owned();
+        let res = self.trade_date.get_mut(u - n as usize).unwrap().to_owned();
         self.to_string(res)
     }
     pub fn get_trade_day(&mut self, datetime: String) -> String {
@@ -1110,7 +1104,7 @@ impl QATradeDate {
 pub fn get_n_day_before_date9(n: i64) -> String {
     let now = Local::now().timestamp();
     let sec = now - 3600 * 24 * n;
-    let dt = Local.timestamp(sec, 0);
+    let dt = Local.timestamp_opt(sec, 0).unwrap();
     let backtest_start = format!("{} 09:00:00", dt.format("%Y-%m-%d").to_string());
     backtest_start
 }

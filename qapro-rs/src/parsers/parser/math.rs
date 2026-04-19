@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use nom::branch::alt;
 use nom::character::complete::{char, space0};
 use nom::combinator::map;

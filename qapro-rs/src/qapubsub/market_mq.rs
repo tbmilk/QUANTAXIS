@@ -1,37 +1,54 @@
+#![allow(dead_code)]
 use crate::qaprotocol::mifi::qafastkline::QAKlineBase;
 use crate::qaruntime::base::{MQAddr, QAKline};
 use crate::qaruntime::qamanagers::mq_manager::MQManager;
 use actix::prelude::*;
-use actix::{Actor, Addr, Context, Handler, Recipient};
 use amiquip::{
-    Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, ExchangeDeclareOptions,
-    ExchangeType, FieldTable, Publish, QueueDeclareOptions, Result,
+    Connection, ConsumerMessage, ConsumerOptions, ExchangeDeclareOptions,
+    ExchangeType, FieldTable, QueueDeclareOptions, Result,
 };
 use log::{error, info, warn};
 use serde_json::Value;
+type ParseResult<T> = std::result::Result<T, String>;
 
 trait Attach {
-    fn init_data(&mut self, data: Value);
-    fn update(&mut self, data: Value);
+    fn attach_init_data(&mut self, data: Value) -> ParseResult<()>;
+    fn attach_update(&mut self, data: Value) -> ParseResult<()>;
 }
 
 impl Attach for QAKlineBase {
-    fn init_data(&mut self, data: Value) {
-        self.datetime = data["datetime"].as_str().unwrap().parse().unwrap();
-        self.updatetime = data["datetime"].as_str().unwrap().parse().unwrap();
-        self.code = data["symbol"].as_str().unwrap().parse().unwrap();
-        self.open = data["last_price"].as_f64().unwrap();
-        self.high = data["last_price"].as_f64().unwrap();
-        self.low = data["last_price"].as_f64().unwrap();
-        self.close = data["last_price"].as_f64().unwrap();
-        self.volume = data["volume"].as_f64().unwrap();
+    fn attach_init_data(&mut self, data: Value) -> ParseResult<()> {
+        let datetime = data["datetime"]
+            .as_str()
+            .ok_or_else(|| "missing datetime".to_string())?;
+        let symbol = data["symbol"]
+            .as_str()
+            .ok_or_else(|| "missing symbol".to_string())?;
+        let last_price = data["last_price"]
+            .as_f64()
+            .ok_or_else(|| "missing last_price".to_string())?;
+        let volume = data["volume"]
+            .as_f64()
+            .ok_or_else(|| "missing volume".to_string())?;
+
+        self.datetime = datetime.to_string();
+        self.updatetime = datetime.to_string();
+        self.code = symbol.to_string();
+        self.open = last_price;
+        self.high = last_price;
+        self.low = last_price;
+        self.close = last_price;
+        self.volume = volume;
+        Ok(())
     }
 
-    fn update(&mut self, data: Value) {
+    fn attach_update(&mut self, data: Value) -> ParseResult<()> {
         if self.open == 0.0 {
-            self.init_data(data.clone());
+            self.attach_init_data(data.clone())?;
         }
-        let new_price = data["last_price"].as_f64().unwrap();
+        let new_price = data["last_price"]
+            .as_f64()
+            .ok_or_else(|| "missing last_price".to_string())?;
         if self.high < new_price {
             self.high = new_price;
         }
@@ -39,9 +56,32 @@ impl Attach for QAKlineBase {
             self.low = new_price;
         }
         self.close = new_price;
-        let cur_datetime: String = data["datetime"].as_str().unwrap().parse().unwrap();
-        self.updatetime = cur_datetime.clone();
+        let cur_datetime = data["datetime"]
+            .as_str()
+            .ok_or_else(|| "missing datetime".to_string())?;
+        self.updatetime = cur_datetime.to_string();
+        Ok(())
     }
+}
+
+fn decode_delivery(body: Vec<u8>) -> Option<String> {
+    String::from_utf8(body).map_err(|e| {
+        error!("[MarketMQ] invalid UTF-8 payload: {}", e);
+        e
+    }).ok()
+}
+
+fn parse_kline_payload(data: &str) -> Option<QAKlineBase> {
+    let kdata: Value = serde_json::from_str(data).map_err(|e| {
+        error!("[MarketMQ] invalid JSON payload: {}", e);
+        e
+    }).ok()?;
+    let mut kbar = QAKlineBase::init();
+    kbar.attach_init_data(kdata).map_err(|e| {
+        error!("[MarketMQ] invalid market payload: {}", e);
+        e
+    }).ok()?;
+    Some(kbar)
 }
 
 // 订阅结构体
@@ -122,13 +162,12 @@ impl MarketMQ {
             match message {
                 ConsumerMessage::Delivery(delivery) => {
                     let msg = delivery.body.clone();
-                    let foo = String::from_utf8(msg).unwrap();
-                    let data = foo.to_string();
-                    let kdata: Value = serde_json::from_str(&data).unwrap();
-                    let mut kbar = QAKlineBase::init();
-                    kbar.init_data(kdata);
-                    // 未重采样Bar
-                    self.notify(kbar.clone());
+                    if let Some(data) = decode_delivery(msg) {
+                        if let Some(kbar) = parse_kline_payload(&data) {
+                            // 未重采样Bar
+                            self.notify(kbar.clone());
+                        }
+                    }
                 }
                 other => {
                     warn!("Consumer ended: {:?}", other);
@@ -164,7 +203,32 @@ impl Handler<Subscribe> for MarketMQ {
 
 impl Handler<Start> for MarketMQ {
     type Result = ();
-    fn handle(&mut self, msg: Start, ctx: &mut Self::Context) -> Self::Result {
-        self.consume_direct();
+    fn handle(&mut self, _msg: Start, _ctx: &mut Self::Context) -> Self::Result {
+        let _ = self.consume_direct();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_kline_payload_rejects_missing_fields() {
+        let payload = r#"{"datetime":"2026-04-19 09:30:00","symbol":"000001"}"#;
+        assert!(parse_kline_payload(payload).is_none());
+    }
+
+    #[test]
+    fn test_parse_kline_payload_accepts_valid_message() {
+        let payload = r#"{"datetime":"2026-04-19 09:30:00","symbol":"000001","last_price":12.3,"volume":456}"#;
+        let bar = parse_kline_payload(payload).expect("payload should parse");
+        assert_eq!(bar.code, "000001");
+        assert_eq!(bar.open, 12.3);
+        assert_eq!(bar.volume, 456.0);
+    }
+
+    #[test]
+    fn test_decode_delivery_rejects_invalid_utf8() {
+        assert!(decode_delivery(vec![0xff, 0xfe]).is_none());
     }
 }

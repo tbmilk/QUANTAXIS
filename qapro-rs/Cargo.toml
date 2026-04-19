@@ -2,8 +2,7 @@
 name = "qapro-rs"
 version = "0.1.1"
 authors = ["yutiansut <yutiansut@qq.com>"]
-edition = "2018"
-resolver = "2"
+edition = "2021"
 description ="quantaxis rust version"
 license = "MIT"
 homepage ="https://github.com/yutiansut/quantaxis"
@@ -11,18 +10,24 @@ repository="https://github.com/quantaxis/quantaxis"
 
 
 
+[lib]
+name = "qapro_rs"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+pyo3-bindings = ["pyo3"]
+openctp = ["dep:ctp2rs"]
+
 [dependencies]
 serde_json = "1.0.73"
 serde_derive = "1.0"
 serde = { version = "1.0", features = ["derive"] } # 序列化
 
-stopwatch = "0.0.7"
-
-
 uuid = { version = "0.8", features = ["serde", "v1", "v4"] }
-log = "0.4"
+hashbrown = { version = "0.12", features = ["serde"] }
+log = "0.4.22"
 regex = "1"
-log4rs = "0.13"
+log4rs = "1.3"
 
 rayon ="1.5"
 lazy_static = "1.4.0"
@@ -58,6 +63,9 @@ thiserror = "1.0"
 rand = "0.7"
 quadprog = "0.0.1"
 itertools = "0.10.3"
+pyo3 = { version = "0.20", features = ["extension-module"], optional = true }
+# Polars 0.46+ 需要较新 num-traits（含 Euclid）；避免被其他 crate 拉到旧版
+num-traits = "0.2.19"
 
 
 ##parsers
@@ -77,74 +85,30 @@ nom = "6.1.2"
 ordered-float = { version = "2.0", default-features = false, features = [
     "serde",
 ] }
-#arrow = {version='6.4.0',default-features = true,   features = ["csv", "prettyprint", "ipc"] }
-#
-#datafusion = {version='6.0.0'}
-exmex = { git = "https://github.com/bertiqwerty/exmex.git", branch = "main" }
-
+# Polars: use crates.io so the dependency tree stays compatible with current Rust
+# (the old yutiansut fork pulled packed_simd_2 / ahash that no longer compile on Rust 1.78+).
 evalexpr = "6.6.0"
-[dependencies.polars]
+ctp2rs = { git = "https://github.com/pseudocodes/ctp2rs", optional = true }
 
-#version = "0.19.1"
-git = "https://github.com/yutiansut/polars"
-rev = "1ceffe980c970794c4a299d20ca94cffe8e8ff1c"
+[dependencies.polars]
+version = "0.46"
 default-features = false
 features = [
-"dynamic_groupby",
-  "zip_with",
-  "simd",
   "lazy",
-  "strings",
+  "parquet",
+  "csv",
   "temporal",
-  "random",
-  "object",
-  "csv-file",
-  "pretty_fmt",
+  "strings",
   "performant",
-  "dtype-full",
-  "rows",
-  "private",
-  "round_series",
-  "is_first",
-  "asof_join",
-  "cross_join",
-  "dot_product",
-  "concat_str",
-  "row_hash",
-  "reinterpret",
-  "decompress-fast",
-  "mode",
-  "extract_jsonpath",
-  "lazy_regex",
-  "cum_agg",
+  "serde",
   "rolling_window",
-  "interpolate",
-  "list",
-  "rank",
-  "diff",
+  "dtype-full",
   "pct_change",
-  "moment",
-  "arange",
-  "true_div",
-  "dtype-categorical",
-  "diagonal_concat",
-  "horizontal_concat",
-  "abs",
-  "ewma",
-  "dot_diagram",
-  "dataframe_arithmetic",
-  "json",
-  "string_encoding",
-  "product",
-  "ndarray",
-  "parquet"
+  "diff",
 ]
 
 [dependencies.clickhouse-rs]
 version = "1.0.0-alpha.1"
 default-features = false
 features = ["async_std"]
-
-
-
 

@@ -66,7 +66,17 @@ pub fn pqlvalue_with_alias_to_pql_value(input: &str) -> IResult<&str, PqlValue> 
             as Map::<String , PqlValue>:
             alias.to_string() => value
         }),
-        _ => todo!(),
+        Field {
+            expr: Expr::Value(value),
+            alias: None,
+        } => value,
+        Field { expr, alias } => {
+            let key = alias.unwrap_or_else(|| String::from(expr.to_owned()));
+            PqlValue::Object(collect! {
+                as Map::<String, PqlValue>:
+                key => PqlValue::default()
+            })
+        }
     };
     Ok((input, value))
 }
@@ -129,9 +139,12 @@ pub fn parse_star_as_expr(input: &str) -> IResult<&str, Expr> {
     map(tag("*"), |_| Expr::Star)(input)
 }
 
-pub fn parse_sql_as_expr(_input: &str) -> IResult<&str, Expr> {
-    todo!()
-    // map(parse_field, |sql| Expr::Sql(sql))(input)
+pub fn parse_sql_as_expr(input: &str) -> IResult<&str, Expr> {
+    // 子查询暂不支持，返回解析错误
+    Err(nom::Err::Error(nom::error::Error::new(
+        input,
+        nom::error::ErrorKind::NoneOf,
+    )))
 }
 
 pub fn parse_alias_in_from_clause(input: &str) -> IResult<&str, String> {

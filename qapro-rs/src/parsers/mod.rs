@@ -1,4 +1,3 @@
-#![feature(box_patterns)]
 pub mod engine;
 pub mod lang;
 pub mod models;

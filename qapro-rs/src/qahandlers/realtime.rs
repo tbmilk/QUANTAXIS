@@ -1,10 +1,9 @@
+#![allow(dead_code)]
 use crate::qahandlers::factorhandler::FactorHandler;
-use crate::qahandlers::state::WSRsp;
 use crate::qahandlers::websocket::{WSMessage, WebsocketHandler};
 use actix::prelude::*;
 use actix_redis::RedisActor;
-use chrono::{Local, Timelike};
-use log::{ warn};
+use log::warn;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 
@@ -130,7 +129,7 @@ impl Actor for Realtime {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Self::Context) {
-        ctx.run_interval(Duration::from_secs(60), |act, ctx| {
+        ctx.run_interval(Duration::from_secs(60), |_act, _ctx| {
             //act.flushall();
         });
     }
@@ -168,13 +167,13 @@ impl Handler<Disconnect> for Realtime {
 
 impl Handler<Join> for Realtime {
     type Result = bool;
-    fn handle(&mut self, msg: Join, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Join, _ctx: &mut Context<Self>) -> Self::Result {
         let Join {
             id,
             room,
-            room_type,
+            room_type: _,
         } = msg;
-        let addr = match self.sessions.get(&id) {
+        let _addr = match self.sessions.get(&id) {
             Some(addr) => addr,
             None => {
                 warn!("非法sid {:?}", id);
@@ -202,7 +201,7 @@ impl Handler<Leave> for Realtime {
         let Leave {
             id,
             room,
-            room_type,
+            room_type: _,
         } = msg;
         let nt = room.replace('"', "").to_uppercase();
         if let Some(r) = self.rooms.get_mut(&nt) {

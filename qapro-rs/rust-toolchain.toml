@@ -1,0 +1,5 @@
+# qapro-rs 依赖 Polars 等链上的 SIMD/zerocopy；在部分 nightly 上会触发
+# `stdarch_x86_avx512` 等不稳定特性错误。使用 stable 可正常编译。
+[toolchain]
+# 需支持依赖中的 edition2024 / 较新 Cargo 元数据（如 ar_archive_writer）
+channel = "stable"

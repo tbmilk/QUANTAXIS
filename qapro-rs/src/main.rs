@@ -128,8 +128,7 @@ async fn main() {
     //
     all_hisdata.clear();
     println!("all histdata is cleaned");
-    // system.run();
-
-    let (_tx, rx) = futures::channel::oneshot::channel::<()>();
-    rx.await.unwrap();
+    // 保持进程存活，便于策略与 MQ 继续运行（原 oneshot 未 send，会永久挂起）
+    println!("QARUNTIME running — press Enter to exit...");
+    let _ = std::io::stdin().read_line(&mut String::new());
 }

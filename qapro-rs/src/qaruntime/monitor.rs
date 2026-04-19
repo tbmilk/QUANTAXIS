@@ -1,28 +1,15 @@
-extern crate redis;
-use actix::prelude::*;
-use actix::{Actor, Addr, AsyncContext, Context, Handler, Recipient, Supervised};
-use chrono::{Local, TimeZone};
+use actix::{Actor, Addr, AsyncContext, Context, Handler, Supervised};
+use chrono::Local;
 use log::{error, info, warn};
-use redis::Commands;
-use serde_json::Value;
 use std::fmt::Debug;
 use std::time::Duration;
-use uuid::Version::Mac;
 
-use crate::qaaccount::account::QA_Account;
-use crate::qaaccount::marketpreset::MarketPreset;
-use crate::qaaccount::order::QAOrder;
-use crate::qaconnector::mongo::mongoclient::QAMongoClient;
-use crate::qadata::resample::{resample_db, QARealtimeResampler};
-use crate::qaenv::localenv::CONFIG;
+use crate::qadata::resample::QARealtimeResampler;
 use crate::qaprotocol::mifi::qafastkline::QAKlineBase;
-use crate::qaprotocol::qifi::account::QIFI;
 use crate::qaruntime::base::{Ack, AddMonitor, Instruct, Order, QAKline, QAOrderRsp, QifiRsp};
 use crate::qaruntime::qacontext::{QAContext, StrategyFunc};
 use crate::qaruntime::qamanagers::monitor_manager::MonitorManager;
 use crate::qautil::tradedate::QATradeDate;
-
-enum StateCode {}
 
 pub struct Monitor<T> {
     pub qactx: QAContext,
@@ -127,7 +114,7 @@ where
         info!("[{}] backtest redis end", self.qactx.account_cookie);
         // 回测的订单不发出
 
-        self.qactx
+        let _ = self.qactx
             .acc
             .to_csv(format!("{}.csv", self.qactx.account_cookie));
         self.qactx.order_que.clear();
@@ -154,9 +141,7 @@ where
         match self.mor_manger.try_send(QAOrderRsp {
             data: self.qactx.order_que.clone(),
         }) {
-            Err(e) => {
-                let m = format!("pub orders fail {:?}", e.to_string());
-            }
+            Err(e) => error!("pub orders fail {:?}", e),
             _ => {}
         }
         //---------
@@ -170,9 +155,7 @@ where
             t: 0,
             data: self.qactx.acc.get_qifi_slice(),
         }) {
-            Err(e) => {
-                let m = format!("qifi save fail {:?}", e.to_string());
-            }
+            Err(e) => error!("qifi save fail {:?}", e),
             _ => {
                 self.qifi_ts = Local::now().timestamp();
             }
@@ -282,7 +265,7 @@ where
             Err(e) => error!("monitor register fail {:?}", e.to_string()),
             _ => {}
         }
-        ctx.run_interval(Duration::from_secs(30), |mor, ctx| {
+        ctx.run_interval(Duration::from_secs(30), |mor, _ctx| {
             //---------
             // save qifi
             //---------
@@ -305,7 +288,7 @@ where
     T: StrategyFunc + Debug,
 {
     type Result = ();
-    fn handle(&mut self, msg: QAKline, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: QAKline, _ctx: &mut Context<Self>) -> Self::Result {
         self.inner_handle(msg.data);
     }
 }
@@ -315,7 +298,7 @@ where
     T: StrategyFunc + Debug,
 {
     type Result = ();
-    fn handle(&mut self, msg: Instruct, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Instruct, _ctx: &mut Context<Self>) -> Self::Result {
         // println!("{:?}", msg);
         match msg.topic.as_str() {
             "settle" => {

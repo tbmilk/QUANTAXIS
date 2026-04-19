@@ -18,7 +18,7 @@ pub struct UnSubscribeForm {
 }
 
 pub async fn realtime_sub(
-    r: HttpRequest,
+    _r: HttpRequest,
     form: web::Json<UnSubscribeForm>,
     addr: web::Data<Addr<Realtime>>,
 ) -> HttpResponse {
@@ -38,7 +38,7 @@ pub async fn realtime_sub(
 }
 
 pub async fn realtime_unsub(
-    r: HttpRequest,
+    _r: HttpRequest,
     form: web::Json<UnSubscribeForm>,
     addr: web::Data<Addr<Realtime>>,
 ) -> HttpResponse {

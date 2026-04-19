@@ -1,3 +1,4 @@
+#![allow(deprecated, dead_code, unused_macros, non_camel_case_types)]
 use chrono::prelude::*;
 use chrono_tz::Tz;
 
@@ -106,7 +107,7 @@ impl DataConnector for QACKClient {
     async fn get_stocklist(&self) -> Result<Vec<String>, Error> {
         let mut cursor = self.pool.get_handle().await?;
         let sqlx = format!("SELECT * FROM quantaxis.stock_cn_codelist where status=='Active'");
-        let mut result = cursor.query(sqlx).fetch_all().await?;
+        let result = cursor.query(sqlx).fetch_all().await?;
 
         let codevec: Vec<_> = result
             .get_column("order_book_id")?
@@ -122,7 +123,7 @@ impl DataConnector for QACKClient {
     async fn get_stocklist_adv(&self) -> Result<QADataStruct_StockList, Error> {
         let mut cursor = self.pool.get_handle().await?;
         let sqlx = format!("SELECT * FROM quantaxis.stock_cn_codelist where status=='Active'");
-        let mut result = cursor.query(sqlx).fetch_all().await?;
+        let result = cursor.query(sqlx).fetch_all().await?;
 
         let codevec: Vec<_> = result
             .get_column("order_book_id")?
@@ -339,7 +340,57 @@ impl DataConnector for QACKClient {
         end: &str,
         freq: &str,
     ) -> Result<QAColumnBar, Error> {
-        todo!()
+        let mut cursor = self.pool.get_handle().await?;
+        let codevar = codelist.join("','");
+        let table = if freq == "1min" { "future_min" } else { "future_day" };
+        let dt = if freq == "1min" { "datetime" } else { "date" };
+        let sqlx = format!(
+            "SELECT * FROM quantaxis.{} where code in ['{}'] AND {} BETWEEN '{}' AND '{}' order by {}",
+            table, codevar, dt, start, end, dt
+        );
+        println!("{:#?}", sqlx);
+        let result = cursor.query(sqlx).fetch_all().await?;
+
+        let openvec: Vec<_> = result.get_column("open")?.iter::<f32>()?.copied().collect();
+        let highvec: Vec<_> = result.get_column("high")?.iter::<f32>()?.copied().collect();
+        let lowvec: Vec<_> = result.get_column("low")?.iter::<f32>()?.copied().collect();
+        let closevec: Vec<_> = result.get_column("close")?.iter::<f32>()?.copied().collect();
+        let volumevec: Vec<_> = result.get_column("trade")?.iter::<f32>()?.copied().collect();
+
+        let codevec: Vec<_> = result.get_column("code")?.iter::<&[u8]>()?.collect();
+        let codev: Vec<String> = codevec
+            .iter()
+            .map(|x| String::from_utf8(x.to_vec()).unwrap())
+            .collect();
+
+        let mut ttimevec: Vec<String> = vec![];
+        if freq == "day" {
+            let timevec: Vec<_> = result.get_column("date")?.iter::<Date<Tz>>()?.collect();
+            ttimevec = timevec
+                .iter()
+                .map(|x| x.to_string()[0..10].parse().unwrap())
+                .collect();
+        } else {
+            let timevec: Vec<_> = result.get_column("datetime")?.iter::<DateTime<Tz>>()?.collect();
+            ttimevec = timevec
+                .iter()
+                .map(|x| x.to_string()[0..19].parse().unwrap())
+                .collect();
+        }
+
+        let res = QAColumnBar {
+            datetime: ttimevec,
+            code: codev,
+            open: openvec.iter().map(|x| *x as f64).collect(),
+            high: highvec.iter().map(|x| *x as f64).collect(),
+            low: lowvec.iter().map(|x| *x as f64).collect(),
+            close: closevec.iter().map(|x| *x as f64).collect(),
+            volume: volumevec.iter().map(|x| *x as f64).collect(),
+            amount: vec![0.0; openvec.len()],
+            frequence: freq.to_string(),
+            currentidx: 0,
+        };
+        Ok(res)
     }
 
     async fn get_stock_adj(
@@ -352,7 +403,7 @@ impl DataConnector for QACKClient {
         let codevar = codelist.join("','");
         let sqlx = format!("SELECT * FROM quantaxis.stock_adj where order_book_id in ['{}'] AND date BETWEEN '{}' AND '{}' ", codevar, start, end);
         println!("{:#?}", sqlx);
-        let mut result = cursor.query(sqlx).fetch_all().await?;
+        let result = cursor.query(sqlx).fetch_all().await?;
         let timevec: Vec<_> = result.get_column("date")?.iter::<Date<Tz>>()?.collect();
 
         let ttimevec = timevec
@@ -384,7 +435,7 @@ impl DataConnector for QACKClient {
             factorname, start, end
         );
 
-        let mut result = cursor.query(sqlx).fetch_all().await?;
+        let result = cursor.query(sqlx).fetch_all().await?;
         let factorvec: Vec<_> = result
             .get_column("factor")?
             .iter::<f32>()?
@@ -431,6 +482,7 @@ mod tests {
     }
 
     use actix_rt;
+    #[ignore = "requires running ClickHouse"]
     #[actix_rt::test]
     async fn execute() {
         let c = QACKClient::init();

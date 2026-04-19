@@ -1,4 +1,4 @@
-use chrono::{TimeZone, Utc};
+use chrono::NaiveDateTime;
 
 use crate::qaprotocol::qifi::account::Trade;
 use serde::{Deserialize, Serialize};
@@ -42,10 +42,11 @@ impl QATransaction {
 
     pub fn to_qifitrade(&mut self) -> Trade {
         let (direction, offset) = self.get_direction_or_offset(self.direction);
-        let td = Utc
-            .datetime_from_str(self.datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
+        let td = NaiveDateTime::parse_from_str(self.datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
             .unwrap()
-            .timestamp_nanos()
+            .and_utc()
+            .timestamp_nanos_opt()
+            .unwrap_or(0)
             - 28800000000000;
 
         Trade {

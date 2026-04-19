@@ -34,5 +34,5 @@ pub fn init_log4(path: &str) {
         )
         .unwrap();
 
-    let handle = log4rs::init_config(config).unwrap();
+    let _handle = log4rs::init_config(config).unwrap();
 }

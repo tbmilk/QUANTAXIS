@@ -1,7 +1,5 @@
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
-use rayon::prelude::*;
-
 use crate::parsers::value::PqlValue;
 
 #[derive(Debug, Default, Clone, PartialEq)]

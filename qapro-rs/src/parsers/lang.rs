@@ -2,11 +2,6 @@ use std::str::FromStr;
 
 use parse_display::{Display, FromStr};
 
-
-
-
-use polars::prelude::*;
-
 use crate::parsers::value::{BPqlValue, PqlValue, TomlValue};
 
 #[derive(Display, FromStr, PartialEq, Clone, Debug)]
@@ -190,8 +185,8 @@ impl Lang {
         let output = self.to_string(compact)?;
 
         if atty::is(atty::Stream::Stdout) {
-            let bytes = output.as_bytes().to_vec();
-            let lang_type = self.to.to_string();
+            let _bytes = output.as_bytes().to_vec();
+            let _lang_type = self.to.to_string();
 
             // PrettyPrinter::new()
             //     .language(&lang_type)

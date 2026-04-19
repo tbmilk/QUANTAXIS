@@ -196,7 +196,7 @@ impl Selector {
             selector.data.append(&mut tail.data.to_owned());
             selector
         } else {
-            todo!()
+            Self::default()
         }
     }
 
@@ -215,7 +215,7 @@ impl Selector {
             selector.data.append(&mut tail.data.to_owned());
             selector
         } else {
-            todo!()
+            Self::default()
         }
     }
 
@@ -235,15 +235,15 @@ impl Selector {
                         let s = selector.expand_fullpath2(&env);
                         s.evaluate(&env)
                     }
-                    Expr::Star => todo!(),
-                    Expr::Func(_) => todo!(),
-                    Expr::Add(_, _) => todo!(),
-                    Expr::Sub(_, _) => todo!(),
-                    Expr::Mul(_, _) => todo!(),
-                    Expr::Div(_, _) => todo!(),
-                    Expr::Rem(_, _) => todo!(),
-                    Expr::Exp(_, _) => todo!(),
-                    Expr::Sql(_) => todo!(),
+                    e @ Expr::Star
+                    | e @ Expr::Func(_)
+                    | e @ Expr::Add(_, _)
+                    | e @ Expr::Sub(_, _)
+                    | e @ Expr::Mul(_, _)
+                    | e @ Expr::Div(_, _)
+                    | e @ Expr::Rem(_, _)
+                    | e @ Expr::Exp(_, _)
+                    | e @ Expr::Sql(_) => e.eval(env),
                 }
             } else {
                 self.expand_abspath(&env).evaluate(&env)

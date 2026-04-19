@@ -4,12 +4,19 @@ use crate::qaruntime::qamanagers::monitor_manager::MonitorManager;
 
 use actix::{Actor, Addr, Context};
 use amiquip::{
-    Channel, Connection, ConsumerMessage, ConsumerOptions, Exchange, ExchangeDeclareOptions,
-    ExchangeType, FieldTable, Publish, QueueDeclareOptions, Result,
+    Connection, ConsumerMessage, ConsumerOptions, ExchangeDeclareOptions,
+    ExchangeType, FieldTable, QueueDeclareOptions, Result,
 };
 use log::{error, info, warn};
 
 // 指令接收
+
+fn decode_delivery(body: Vec<u8>) -> Option<String> {
+    String::from_utf8(body).map_err(|e| {
+        error!("[InstructMQ] invalid UTF-8 payload: {}", e);
+        e
+    }).ok()
+}
 
 pub struct InstructMQ {
     pub amqp: String,
@@ -54,8 +61,9 @@ impl InstructMQ {
             match message {
                 ConsumerMessage::Delivery(delivery) => {
                     let msg = delivery.body.clone();
-                    let foo = String::from_utf8(msg).unwrap();
-                    let data = foo.to_string();
+                    let Some(data) = decode_delivery(msg) else {
+                        continue;
+                    };
                     match serde_json::from_str(&data) {
                         Ok(v) => match self.morm.try_send::<Instruct>(v) {
                             Ok(_) => {}
@@ -80,6 +88,21 @@ impl Actor for InstructMQ {
     type Context = Context<Self>;
     fn started(&mut self, ctx: &mut Self::Context) {
         ctx.set_mailbox_capacity(1000); // 设置邮箱容量
-        self.consume_direct();
+        let _ = self.consume_direct();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_delivery_rejects_invalid_utf8() {
+        assert!(decode_delivery(vec![0xff, 0xfe]).is_none());
+    }
+
+    #[test]
+    fn test_decode_delivery_accepts_utf8() {
+        assert_eq!(decode_delivery(br#"{"id":"1"}"#.to_vec()).as_deref(), Some(r#"{"id":"1"}"#));
     }
 }

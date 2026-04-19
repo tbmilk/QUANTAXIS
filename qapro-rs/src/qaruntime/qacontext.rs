@@ -1,13 +1,9 @@
-use chrono::prelude::Utc;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::ops::Deref;
 
 use crate::qaaccount::account::QA_Account;
 use crate::qaaccount::order::{QAOrder, TradeOrder};
+use crate::qadata::datafunc::Que;
 use crate::qaprotocol::mifi::market::BAR;
-
-use crate::qadata::datafunc::{dhhv, dllv, max, min, Que};
 
 pub trait StrategyFunc {
     fn on_bar_next(&mut self, data: &BAR, context: &mut QAContext);
@@ -166,7 +162,7 @@ impl QAContext {
                 });
                 self.lasttradebar = self.bar_id;
             }
-            Err(e) => {}
+            Err(_e) => {}
         };
     }
     pub fn sell_open(&mut self, code: &str, amount: f64, time: &str, price: f64) {
@@ -179,7 +175,7 @@ impl QAContext {
                 });
                 self.lasttradebar = self.bar_id;
             }
-            Err(e) => {}
+            Err(_e) => {}
         };
     }
     pub fn buy_close(&mut self, code: &str, amount: f64, time: &str, price: f64) {
@@ -192,7 +188,7 @@ impl QAContext {
                 });
                 self.lasttradebar = self.bar_id;
             }
-            Err(e) => {}
+            Err(_e) => {}
         };
     }
     pub fn sell_close(&mut self, code: &str, amount: f64, time: &str, price: f64) {
@@ -205,7 +201,7 @@ impl QAContext {
                 });
                 self.lasttradebar = self.bar_id;
             }
-            Err(e) => {}
+            Err(_e) => {}
         };
     }
 }

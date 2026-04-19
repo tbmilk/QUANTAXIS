@@ -1,13 +1,13 @@
 use crate::qaprotocol::mifi::market::BAR;
 use crate::qaruntime::qacontext::{QAContext, StrategyFunc};
 use std::fs::File;
-use std::io::{BufRead, BufReader, Error, Write};
+use std::io::Write;
 
 pub fn backtest(
     data: Vec<BAR>,
     name: String,
     code: String,
-    frequence: i32,
+    _frequence: i32,
     context: &mut QAContext,
     stg: &mut impl StrategyFunc,
     fs: &mut File,

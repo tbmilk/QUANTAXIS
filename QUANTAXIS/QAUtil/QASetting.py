@@ -53,6 +53,8 @@ class QA_Setting():
         self.mongo_uri = uri or self.get_mongo()
         self.username = None
         self.password = None
+        self._client = None
+        self._client_async = None
 
         # 加入配置文件地址
 
@@ -63,15 +65,15 @@ class QA_Setting():
 
             try:
                 res = config.get('MONGODB', 'uri')
-            except:
+            except (configparser.NoOptionError, configparser.NoSectionError):
                 res = DEFAULT_DB_URI
 
         else:
             config = configparser.ConfigParser()
             config.add_section('MONGODB')
             config.set('MONGODB', 'uri', DEFAULT_DB_URI)
-            f = open('{}{}{}'.format(setting_path, os.sep, 'config.ini'), 'w')
-            config.write(f)
+            with open('{}{}{}'.format(setting_path, os.sep, 'config.ini'), 'w') as f:
+                config.write(f)
             res = DEFAULT_DB_URI
 
         return res
@@ -97,7 +99,7 @@ class QA_Setting():
             config = configparser.ConfigParser()
             config.read(CONFIGFILE_PATH)
             return config.get(section, option)
-        except:
+        except (configparser.Error, OSError):
             res = self.client.quantaxis.usersetting.find_one(
                 {'section': section})
             if res:
@@ -184,7 +186,7 @@ class QA_Setting():
                 self.set_config(section, option, val)
                 return val
 
-        except:
+        except (configparser.Error, TypeError, ValueError):
             self.set_config(section, option, val)
             return val
 
@@ -193,23 +195,42 @@ class QA_Setting():
 
     @property
     def client(self):
-        return QA_util_sql_mongo_setting(self.mongo_uri)
+        if self._client is None:
+            self._client = QA_util_sql_mongo_setting(self.mongo_uri)
+        return self._client
 
     @property
     def client_async(self):
-        return QA_util_sql_async_mongo_setting(self.mongo_uri)
+        if self._client_async is None:
+            self._client_async = QA_util_sql_async_mongo_setting(self.mongo_uri)
+        return self._client_async
+
+    def reset_client_cache(self):
+        self._client = None
+        self._client_async = None
 
     def change(self, ip, port):
         self.ip = ip
         self.port = port
-        global DATABASE
-        DATABASE = self.client
+        self.mongo_uri = 'mongodb://{}:{}'.format(ip, port)
+        self.reset_client_cache()
         return self
 
 
+class _LazyDatabaseProxy:
+    def __init__(self, getter):
+        self._getter = getter
+
+    def __getattr__(self, name):
+        return getattr(self._getter(), name)
+
+    def __repr__(self):
+        return repr(self._getter())
+
+
 QASETTING = QA_Setting()
-DATABASE = QASETTING.client.quantaxis
-DATABASE_ASYNC = QASETTING.client_async.quantaxis
+DATABASE = _LazyDatabaseProxy(lambda: QASETTING.client.quantaxis)
+DATABASE_ASYNC = _LazyDatabaseProxy(lambda: QASETTING.client_async.quantaxis)
 
 
 def exclude_from_stock_ip_list(exclude_ip_list):

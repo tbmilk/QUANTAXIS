@@ -1,51 +1,53 @@
-use polars::prelude::{
-    ChunkCompare, CsvReader, DataFrame, DataType, Field, NamedFrom, ParquetCompression,
-    ParquetReader, ParquetWriter, Result as PolarResult, RollingOptions, Schema, SerReader, Series,
-};
-
-use polars::series::ops::NullBehavior;
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use std::fs::{ File};
+#![allow(non_camel_case_types, dead_code)]
+use polars::prelude::*;
+use std::fs::File;
 use std::sync::Arc;
 
 use crate::qaenv::localenv::CONFIG;
-const FILES_IN_PARALLEL: usize = 2;
 
 pub struct QADataStruct_StockDay {
     pub data: DataFrame,
 }
 
-fn QADataStruct_StockDay_schema() -> Schema {
-    Schema::new(vec![
-        Field::new("date", DataType::Utf8),
-        Field::new("code", DataType::Utf8),
-        Field::new("order_book_id", DataType::Utf8),
-        Field::new("num_trades", DataType::Float32),
-        Field::new("limit_up", DataType::Float32),
-        Field::new("limit_down", DataType::Float32),
-        Field::new("open", DataType::Float32),
-        Field::new("high", DataType::Float32),
-        Field::new("low", DataType::Float32),
-        Field::new("close", DataType::Float32),
-        Field::new("volume", DataType::Float32),
-        Field::new("total_turnover", DataType::Float32),
-        Field::new("amount", DataType::Float32),
-    ])
+fn qa_schema_stock_day() -> Schema {
+    use DataType::*;
+    vec![
+        Field::new("date".into(), String),
+        Field::new("code".into(), String),
+        Field::new("order_book_id".into(), String),
+        Field::new("num_trades".into(), Float32),
+        Field::new("limit_up".into(), Float32),
+        Field::new("limit_down".into(), Float32),
+        Field::new("open".into(), Float32),
+        Field::new("high".into(), Float32),
+        Field::new("low".into(), Float32),
+        Field::new("close".into(), Float32),
+        Field::new("volume".into(), Float32),
+        Field::new("total_turnover".into(), Float32),
+        Field::new("amount".into(), Float32),
+    ]
+    .into_iter()
+    .collect()
 }
+
 impl QADataStruct_StockDay {
     pub fn new_from_csv(path: &str) -> Self {
-        let schema = QADataStruct_StockDay_schema();
-        let file = File::open(path).expect("Cannot open file.");
-        let df = CsvReader::new(file)
-            .with_schema(&Arc::new(schema))
-            .has_header(true)
+        let schema = qa_schema_stock_day();
+        let df = CsvReadOptions::default()
+            .with_has_header(true)
+            .with_schema(Some(Arc::new(schema)))
+            .try_into_reader_with_file_path(Some(path.into()))
+            .expect("Cannot open CSV")
             .finish()
-            .unwrap();
+            .expect("CSV parse failed");
         Self { data: df }
     }
+
     fn new_from_path() -> Self {
-        todo!()
+        let path = format!("{}stockday.parquet", CONFIG.DataPath.cache);
+        Self::new_from_parquet(&path)
     }
+
     pub fn new_from_vec(
         date: Vec<String>,
         code: Vec<String>,
@@ -59,42 +61,45 @@ impl QADataStruct_StockDay {
         volume: Vec<f32>,
         total_turnover: Vec<f32>,
     ) -> Self {
-        let dateS = Series::new("date", &date);
-        let codeS = Series::new("code", &code);
-        let order_book_idS = Series::new("order_book_id", &code);
-        let num_tradesS = Series::new("num_trades", &num_trades);
-        let limit_upS = Series::new("limit_up", &limit_up);
-        let limit_downS = Series::new("limit_down", &limit_down);
-        let openS = Series::new("open", &open);
-        let highS = Series::new("high", &high);
-        let lowS = Series::new("low", &low);
-        let closeS = Series::new("close", &close);
-        let volumeS = Series::new("volume", &volume);
-        let total_turnoverS = Series::new("total_turnover", &total_turnover);
-        let amountS = Series::new("amount", &total_turnover);
+        let date_s = Series::new("date".into(), date);
+        let order_book_id_s = Series::new("order_book_id".into(), code.clone());
+        let code_s = Series::new("code".into(), code);
+        let num_trades_s = Series::new("num_trades".into(), num_trades);
+        let limit_up_s = Series::new("limit_up".into(), limit_up);
+        let limit_down_s = Series::new("limit_down".into(), limit_down);
+        let open_s = Series::new("open".into(), open);
+        let high_s = Series::new("high".into(), high);
+        let low_s = Series::new("low".into(), low);
+        let close_s = Series::new("close".into(), close);
+        let volume_s = Series::new("volume".into(), volume);
+        let total_turnover_s = Series::new("total_turnover".into(), total_turnover.clone());
+        let amount_s = Series::new("amount".into(), total_turnover);
 
         let df = DataFrame::new(vec![
-            dateS,
-            codeS,
-            order_book_idS,
-            num_tradesS,
-            limit_upS,
-            limit_downS,
-            openS,
-            highS,
-            lowS,
-            closeS,
-            volumeS,
-            total_turnoverS,
-            amountS,
+            date_s.into(),
+            code_s.into(),
+            order_book_id_s.into(),
+            num_trades_s.into(),
+            limit_up_s.into(),
+            limit_down_s.into(),
+            open_s.into(),
+            high_s.into(),
+            low_s.into(),
+            close_s.into(),
+            volume_s.into(),
+            total_turnover_s.into(),
+            amount_s.into(),
         ])
         .unwrap();
-        Self {
-            data: df
-                .sort(&["date", "order_book_id"], vec![false, false])
-                .unwrap(),
-        }
+        let sorted = df
+            .sort(
+                ["date", "order_book_id"],
+                SortMultipleOptions::default().with_order_descending_multi([false, false]),
+            )
+            .unwrap();
+        Self { data: sorted }
     }
+
     pub fn new_from_parquet(path: &str) -> Self {
         let file = File::open(path).expect("Cannot open file.");
         let df = ParquetReader::new(file).finish().unwrap();
@@ -102,68 +107,83 @@ impl QADataStruct_StockDay {
     }
 
     pub fn query_code(&mut self, order_book_id: &str) -> DataFrame {
-        let value = self.data.column("order_book_id").unwrap();
-        let mask = value.equal(order_book_id);
-        let selectdf = &self.data.filter(&mask).unwrap();
-        selectdf.to_owned()
-    }
-    pub fn query_date(&mut self, date: &str) -> DataFrame {
-        let value = self.data.column("date").unwrap();
-        let mask = value.equal(date);
-        let selectdf = &self.data.filter(&mask).unwrap();
-        selectdf.to_owned()
-    }
-    pub fn high(&mut self) -> &Series {
-        &self.data["high"]
+        let s = self
+            .data
+            .column("order_book_id")
+            .expect("column")
+            .as_materialized_series();
+        let mask = s.equal(order_book_id).expect("compare");
+        self.data.filter(&mask).unwrap().clone()
     }
 
-    pub fn low(&mut self) -> &Series {
-        &self.data["low"]
+    pub fn query_date(&mut self, date: &str) -> DataFrame {
+        let s = self
+            .data
+            .column("date")
+            .expect("column")
+            .as_materialized_series();
+        let mask = s.equal(date).expect("compare");
+        self.data.filter(&mask).unwrap().clone()
     }
-    pub fn close(&mut self) -> &Series {
-        &self.data["close"]
+
+    pub fn high(&mut self) -> Series {
+        self.data.column("high").unwrap().as_materialized_series().clone()
+    }
+
+    pub fn low(&mut self) -> Series {
+        self.data.column("low").unwrap().as_materialized_series().clone()
+    }
+
+    pub fn close(&mut self) -> Series {
+        self.data.column("close").unwrap().as_materialized_series().clone()
     }
 
     pub fn save_cache(&mut self) {
-        let cache = &CONFIG.DataPath.cache;
         let cachepath = format!("{}stockday.parquet", &CONFIG.DataPath.cache);
         let file = File::create(cachepath).expect("could not create file");
-        ParquetWriter::new(file).finish(&self.data);
+        ParquetWriter::new(file)
+            .finish(&mut self.data)
+            .expect("parquet write");
     }
 
     pub fn save_selfdefined_cache(&mut self, path: &str) {
-        //let cache = &CONFIG.DataPath.cache;
-        // let cachepath = format!("{}stockday.parquet", &CONFIG.DataPath.cache);
         let file = File::create(path).expect("could not create file");
-        ParquetWriter::new(file).finish(&self.data);
+        ParquetWriter::new(file)
+            .finish(&mut self.data)
+            .expect("parquet write");
     }
 }
+
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
+    #[ignore = "requires testdata.csv"]
     fn test_QADataStruct_StockDay() {
         let mut sd = QADataStruct_StockDay::new_from_csv("testdata.csv");
 
         println!("Final DataFrame:\n{}", sd.data);
-        let high = &sd.data["high"];
-        let low = &sd.data["low"];
+        let high = sd.high();
+        let low = sd.low();
 
-        let calc = high - low;
+        let calc = (&high - &low).unwrap();
         println!("Final Series high - low :\n{}", calc);
 
-        println!("High diff:\n{}", high.diff(2, NullBehavior::Drop));
+        // diff(n) = series - series.shift(n)
+        let diff_s = (&high - &high.shift(2)).unwrap();
+        println!("High diff:\n{}", diff_s);
 
+        let opts = RollingOptionsFixedWindow {
+            window_size: 3,
+            min_periods: 1,
+            weights: None,
+            center: false,
+            fn_params: None,
+        };
         println!(
             "High rollingstd:\n{}",
-            high.rolling_std(RollingOptions {
-                window_size: 3,
-                min_periods: 1,
-                weights: None,
-                center: false
-            })
-            .unwrap()
+            high.rolling_std(opts).unwrap()
         );
     }
 
@@ -184,6 +204,8 @@ mod test {
         );
         println!("{:#?}", testds.data);
     }
+
+    #[ignore = "requires CONFIG/infrastructure"]
     #[test]
     fn test_QADataStruct_StockDay_save() {
         let mut testds = QADataStruct_StockDay::new_from_vec(

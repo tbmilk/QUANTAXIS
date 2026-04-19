@@ -33,7 +33,11 @@ pub fn function(input: &str) -> IResult<&str, Expr> {
     let func = match funcname.to_lowercase().as_str() {
         "count" => Func::Count(expr),
         "upper" => Func::Upper(expr),
-        _ => todo!(),
+        "lower" => Func::Lower(expr),
+        "ceil" => Func::Ceil(expr),
+        "floor" => Func::Floor(expr),
+        "round" => Func::Round(expr),
+        _ => return Err(nom::Err::Error(nom::error::Error::new(input, nom::error::ErrorKind::NoneOf))),
     };
 
     let res = Expr::Func(Box::new(func));

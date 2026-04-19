@@ -37,8 +37,23 @@ pub fn evaluate<'a>(sql: &Sql, data: &'a PqlValue) -> PqlValue {
                 restrict(Some(data.to_owned()), &path, &Some(cond)).expect("restricted value")
             }
             _ => {
-                dbg!(&sql.where_clause);
-                todo!();
+                // 非路径条件：对整个数据集逐条评估
+                let cond = WhereCond::Eq {
+                    expr: expr.to_owned(),
+                    right: right.to_owned(),
+                };
+                match data {
+                    PqlValue::Array(arr) => PqlValue::Array(
+                        arr.into_iter()
+                            .filter(|item| {
+                                let env = Env::from(item.to_owned());
+                                expr.to_owned().expand_fullpath(&env).eval(&env) == *right
+                            })
+                            .collect(),
+                    ),
+                    _ => restrict(Some(data.to_owned()), &Selector::default(), &Some(cond))
+                        .unwrap_or(data),
+                }
             }
         },
         Some(box WhereCond::Like { expr, right }) => match expr {
@@ -51,11 +66,15 @@ pub fn evaluate<'a>(sql: &Sql, data: &'a PqlValue) -> PqlValue {
                 restrict(Some(data.to_owned()), &path, &Some(cond)).expect("restricted value")
             }
             _ => {
-                dbg!(&sql.where_clause);
-                todo!();
+                let cond = WhereCond::Like {
+                    expr: expr.to_owned(),
+                    right: right.to_owned(),
+                };
+                restrict(Some(data.to_owned()), &Selector::default(), &Some(cond))
+                    .unwrap_or(data)
             }
         },
-        Some(_) => todo!(),
+        Some(_) => data,
     };
 
     let projs = sql
@@ -85,7 +104,9 @@ pub fn evaluate<'a>(sql: &Sql, data: &'a PqlValue) -> PqlValue {
                         SourceValue::Selector(selector) => {
                             field.alias = Some(selector.to_string());
                         }
-                        _ => todo!(),
+                        SourceValue::Expr(expr) => {
+                            field.alias = Some(String::from(expr.to_owned()));
+                        }
                     }
                     field
                 })

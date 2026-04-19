@@ -1,18 +1,9 @@
+#![allow(non_camel_case_types, dead_code)]
 use crate::qaenv::localenv::CONFIG;
 
-use polars::prelude::{
-    CsvReader, DataFrame, DataType, Field, NamedFrom, ParquetReader, ParquetWriter,
-    Result as PolarResult, RollingOptions, Schema, SerReader, Series,
-};
+use polars::prelude::*;
 use std::fs::File;
 
-fn QADataStruct_StockAdj_schema() -> Schema {
-    Schema::new(vec![
-        Field::new("date", DataType::Utf8),
-        Field::new("order_book_id", DataType::Utf8),
-        Field::new("adj", DataType::Float32),
-    ])
-}
 pub struct QADataStruct_StockAdj {
     pub data: DataFrame,
     name: String,
@@ -20,18 +11,22 @@ pub struct QADataStruct_StockAdj {
 
 impl QADataStruct_StockAdj {
     pub fn new_from_vec(date: Vec<String>, order_book_id: Vec<String>, adj: Vec<f32>) -> Self {
-        let dateS = Series::new("date", &date);
-
-        let order_book_idS = Series::new("order_book_id", &order_book_id);
-        let adjS = Series::new("adj", &adj);
-        let df = DataFrame::new(vec![dateS, order_book_idS, adjS]).unwrap();
+        let date_s = Series::new("date".into(), date);
+        let order_book_id_s = Series::new("order_book_id".into(), order_book_id);
+        let adj_s = Series::new("adj".into(), adj);
+        let df = DataFrame::new(vec![date_s.into(), order_book_id_s.into(), adj_s.into()]).unwrap();
+        let sorted = df
+            .sort(
+                ["date", "order_book_id"],
+                SortMultipleOptions::default().with_order_descending_multi([false, false]),
+            )
+            .unwrap();
         Self {
-            data: df
-                .sort(&["date", "order_book_id"], vec![false, false])
-                .unwrap(),
+            data: sorted,
             name: "stockadj".to_string(),
         }
     }
+
     pub fn new_from_parquet(path: &str) -> Self {
         let file = File::open(path).expect("Cannot open file.");
         let df = ParquetReader::new(file).finish().unwrap();
@@ -44,7 +39,8 @@ impl QADataStruct_StockAdj {
     pub fn save_cache(&mut self) {
         let cachepath = format!("{}stockadj.parquet", &CONFIG.DataPath.cache);
         let file = File::create(cachepath).expect("could not create file");
-
-        ParquetWriter::new(file).finish(&self.data);
+        ParquetWriter::new(file)
+            .finish(&mut self.data)
+            .expect("parquet write");
     }
 }

@@ -1,4 +1,4 @@
-use chrono::prelude::*;
+#![allow(non_snake_case, dead_code)]
 use serde::{Deserialize, Serialize};
 use std::clone::Clone;
 
@@ -33,7 +33,7 @@ impl Handler for FullData {
     }
 
     fn get_date(&self) -> String {
-        unimplemented!()
+        self.time[..10].to_string()
     }
 
     fn get_open(&self) -> f64 {
@@ -193,7 +193,7 @@ impl Handler for CtpPro {
     }
 
     fn get_open(&self) -> f64 {
-        unimplemented!()
+        self.open_price
     }
 
     fn get_close(&self) -> f64 {
@@ -201,11 +201,11 @@ impl Handler for CtpPro {
     }
 
     fn get_high(&self) -> f64 {
-        unimplemented!()
+        self.high_price
     }
 
     fn get_low(&self) -> f64 {
-        unimplemented!()
+        self.low_price
     }
 
     fn get_vol(&self) -> f64 {
@@ -331,7 +331,7 @@ impl Default for StockDay {
 
 impl Handler for StockDay {
     fn get_datetime(&self) -> String {
-        unimplemented!()
+        format!("{} 00:00:00", self.date)
     }
 
     fn get_code(&self) -> String {
@@ -428,7 +428,7 @@ impl Default for FutureDay {
 
 impl Handler for FutureDay {
     fn get_datetime(&self) -> String {
-        unimplemented!()
+        format!("{} 00:00:00", self.date)
     }
 
     fn get_code(&self) -> String {
@@ -460,7 +460,7 @@ impl Handler for FutureDay {
     }
 
     fn get_amount(&self) -> f64 {
-        unimplemented!()
+        0.0
     }
 
     fn set_code(&mut self, code: String) {
@@ -491,8 +491,8 @@ impl Handler for FutureDay {
         self.volume = vol;
     }
 
-    fn set_amount(&mut self, amount: f64) {
-        unimplemented!()
+    fn set_amount(&mut self, _amount: f64) {
+        // FutureDay 没有 amount 字段，忽略
     }
 }
 
@@ -617,7 +617,11 @@ impl Handler for StockMin {
     }
 
     fn get_date(&self) -> String {
-        unimplemented!()
+        if self.datetime.len() >= 10 {
+            self.datetime[..10].to_string()
+        } else {
+            self.date.clone()
+        }
     }
 
     fn get_open(&self) -> f64 {
@@ -813,7 +817,7 @@ impl Handler for L2xHis {
     }
 
     fn get_open(&self) -> f64 {
-        unimplemented!()
+        self.price
     }
 
     fn get_close(&self) -> f64 {
@@ -821,11 +825,11 @@ impl Handler for L2xHis {
     }
 
     fn get_high(&self) -> f64 {
-        unimplemented!()
+        self.price
     }
 
     fn get_low(&self) -> f64 {
-        unimplemented!()
+        self.price
     }
 
     fn get_vol(&self) -> f64 {
@@ -833,7 +837,7 @@ impl Handler for L2xHis {
     }
 
     fn get_amount(&self) -> f64 {
-        unimplemented!()
+        self.price * self.vol
     }
 }
 

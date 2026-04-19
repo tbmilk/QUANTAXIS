@@ -3,7 +3,6 @@ use indexmap::IndexMap as Map;
 
 use crate::parsers::sql::Expr;
 use crate::parsers::sql::Selector;
-use crate::parsers::sql::SelectorNode;
 use crate::parsers::value::PqlValue;
 
 #[derive(Debug, Default, Clone)]
@@ -54,10 +53,17 @@ impl Env {
                         };
                         v
                     }
-                    _ => todo!(),
+                    other => {
+                        let value = other.eval(self);
+                        if tail.data.len() > 0 {
+                            value.select_by_selector(&tail)
+                        } else {
+                            value
+                        }
+                    }
                 }
             } else {
-                todo!()
+                PqlValue::Missing
             }
         } else {
             unreachable!()

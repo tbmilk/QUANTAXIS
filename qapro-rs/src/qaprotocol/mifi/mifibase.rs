@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+#![allow(unused_variables)]
+use serde::Serialize;
 
 pub trait Handler {
     fn to_json(&self) -> String

@@ -1,4 +1,5 @@
 import pandas as pd
+import re
 from functools import lru_cache
 from QUANTAXIS.QAUtil.QAParameter import EXCHANGE_ID
 
@@ -999,30 +1000,46 @@ class MARKET_PRESET:
         return self.pdtable.T.query('exchange=="{}"'.format(exchange)
                                    ).index.tolist()
 
-    def get_code(self, code):
+    def _default_stock_entry(self):
+        return {
+            'name': 'default',
+            'unit_table': 1.0,
+            'price_tick': 1.0,
+            'buy_frozen_coeff': 1,
+            'sell_frozen_coeff': 1,
+            'exchange': 'stock_cn',
+            'commission_coeff_peramount': 0.001,
+            'commission_coeff_pervol': 0,
+            'commission_coeff_today_peramount': 0.001,
+            'commission_coeff_today_pervol': 0
+        }
+
+    def _default_unknown_entry(self):
+        entry = self._default_stock_entry()
+        entry['exchange'] = None
+        return entry
+
+    def _extract_prefix(self, code):
+        instrument_id = str(code).split('.', 1)[-1]
         try:
-            int(str(code)[1])
-            code = code[0]
-        except:
-            if str(code).endswith('L8') or str(code).endswith('L9'):
-                code = code[0:-2]
-            else:
-                code = code[0:2]
-        return self.table.get(
-            str(code).upper(),
-            {
-                'name': 'default',
-                'unit_table': 1.0,
-                'price_tick': 1.0,
-                'buy_frozen_coeff': 1,
-                'sell_frozen_coeff': 1,
-                'exchange': 'stock_cn',
-                'commission_coeff_peramount': 0.001,
-                'commission_coeff_pervol': 0,
-                'commission_coeff_today_peramount': 0.001,
-                'commission_coeff_today_pervol': 0
-            }
-        )
+            int(str(instrument_id)[1])
+            return str(instrument_id)[0].upper()
+        except (IndexError, TypeError, ValueError):
+            if str(instrument_id).endswith('L8') or str(instrument_id).endswith('L9'):
+                return str(instrument_id)[0:-2].upper()
+            return str(instrument_id)[0:2].upper()
+
+    def _is_stock_like_code(self, code):
+        instrument_id = str(code).split('.', 1)[-1]
+        return bool(re.fullmatch(r'\d{6}', instrument_id))
+
+    def get_code(self, code):
+        preset = self.table.get(self._extract_prefix(code))
+        if preset is not None:
+            return preset
+        if self._is_stock_like_code(code):
+            return self._default_stock_entry()
+        return self._default_unknown_entry()
 
     # 合约所属交易所代码
 

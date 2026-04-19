@@ -1,15 +1,12 @@
 use actix_rt;
 
+use polars::prelude::*;
+use polars::series::ops::NullBehavior;
+
 use qapro_rs::qaconnector::clickhouse::ckclient;
 use qapro_rs::qaconnector::clickhouse::ckclient::DataConnector;
 use qapro_rs::qadatastruct::stockday::QADataStruct_StockDay;
 use qapro_rs::qaenv::localenv::CONFIG;
-use qapro_rs::qalog::log4::init_log4;
-use qapro_rs::qaprotocol::mifi::qafastkline::QAKlineBase;
-
-use polars::prelude::{ChunkCompare, RollingOptions};
-use polars::series::ops::NullBehavior;
-use std::fmt::format;
 
 #[actix_rt::main]
 async fn main() {
@@ -44,35 +41,50 @@ async fn main() {
 
     println!(
         "groupby test {:#?}",
-        data.data.groupby(["date"]).unwrap().select(["close"]).mean()
+        data.data
+            .clone()
+            .lazy()
+            .group_by([col("date")])
+            .agg([col("close").mean()])
+            .collect()
+            .unwrap()
     );
     println!(
         "groupby test {:#?}",
         data.data
-            .groupby(["order_book_id"])
+            .clone()
+            .lazy()
+            .group_by([col("order_book_id")])
+            .agg([col("close").mean()])
+            .collect()
             .unwrap()
-            .select(["close"])
-            .mean()
     );
 
+    let high_s = data
+        .data
+        .column("high")
+        .unwrap()
+        .as_materialized_series();
+    // Polars 0.46+: `diff` 为 polars_ops 中的函数，不再在 Series 上作为方法
     println!(
         "diff test {:#?}",
-        data.data["high"].diff(1, NullBehavior::Drop)
+        diff(high_s, 1, NullBehavior::Drop).unwrap()
     );
 
     let selectdf = data.query_code("300002.XSHE");
     println!("select df {:#?}", selectdf);
-    let close = &selectdf["close"];
+    let close = selectdf.column("close").unwrap().as_materialized_series();
     let lastclose = close.shift(1);
+    // 避免 `&close` 形成 `&&Series`，与 Polars 的 `Div for &Series` 不匹配
     println!("pct test {:#?}", close / &lastclose);
 
-    let ma20 = close
-        .rolling_mean(RollingOptions {
-            window_size: 5,
-            min_periods: 1,
-            weights: None,
-            center: false,
-        })
-        .unwrap();
+    let opts = RollingOptionsFixedWindow {
+        window_size: 5,
+        min_periods: 1,
+        weights: None,
+        center: false,
+        fn_params: None,
+    };
+    let ma20 = close.rolling_mean(opts).unwrap();
     println!("rolling mean test {:#?}", ma20);
 }

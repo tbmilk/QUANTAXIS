@@ -1,4 +1,5 @@
 import datetime
+import numbers
 import traceback
 import uuid
 
@@ -33,10 +34,52 @@ def parse_orderdirection(od):
 
 
 class QIFI_Account():
+    _REQUIRED_QIFI_ACCOUNT_FIELDS = (
+        "user_id",
+        "pre_balance",
+        "deposit",
+        "withdraw",
+        "WithdrawQuota",
+        "close_profit",
+        "static_balance",
+    )
+    _REQUIRED_QIFI_POSITION_FIELDS = (
+        "account_cookie",
+        "portfolio_cookie",
+        "username",
+        "frozen",
+        "moneypreset",
+        "moneypresetLeft",
+        "volume_long_today",
+        "volume_long_his",
+        "volume_short_today",
+        "volume_short_his",
+        "volume_long_frozen_his",
+        "volume_long_frozen_today",
+        "volume_short_frozen_his",
+        "volume_short_frozen_today",
+        "margin_long",
+        "margin_short",
+        "open_price_long",
+        "open_price_short",
+        "position_price_long",
+        "position_price_short",
+        "open_cost_long",
+        "open_cost_short",
+        "position_cost_long",
+        "position_cost_short",
+        "position_id",
+        "market_type",
+        "exchange_id",
+        "trades",
+        "orders",
+        "name",
+    )
 
     def __init__(self, username, password, model="SIM", broker_name="QAPaperTrading", portfolioname='QAPaperTrade',
                  trade_host=mongo_ip, init_cash=1000000, taskid=str(uuid.uuid4()), nodatabase=False, dbname='mongodb',
-                 clickhouse_ip=clickhouse_ip, clickhouse_port=clickhouse_port, clickhouse_user=clickhouse_user, clickhouse_password=clickhouse_password):
+                 clickhouse_ip=clickhouse_ip, clickhouse_port=clickhouse_port, clickhouse_user=clickhouse_user,
+                 clickhouse_password=clickhouse_password, strict_sync=False, strict_code_format=True):
         """Initial
         QIFI Account是一个基于 DIFF/ QIFI/ QAAccount后的一个实盘适用的Account基类
 
@@ -110,6 +153,12 @@ class QIFI_Account():
         self._clickhouse_port = clickhouse_port
         self._clickhouse_user = clickhouse_user
         self._clickhouse_password = clickhouse_password
+        self.verbose = False
+        self.last_sync_error = None
+        self.last_sync_success = None
+        self.strict_sync = strict_sync
+        self.strict_code_format = strict_code_format
+        self.persist_pending = False
 
     def initial(self):
         if not self.nodatabase:
@@ -135,18 +184,21 @@ class QIFI_Account():
             """
             非数据库模式  不用 reload
             """
-            print('当前为 QIFIAccount::非数据库模式, 适用于测试/二次开发')
+            self.log('当前为 QIFIAccount::非数据库模式, 适用于测试/二次开发')
 
         if self.pre_balance == 0 and self.balance == 0 and self.model != "REAL":
             self.log('Create new Account')
-            self.create_simaccount()
+            if self.model == "BACKTEST":
+                self.create_backtestaccount()
+            else:
+                self.create_simaccount()
         self.sync()
 
 
 
     def save_ck(self):
         for tablename  in ['accounts', 'positions', 'orders', 'trades', 'banks', 'qifi']:
-            print(tablename)
+            self.log(tablename)
 
             res = self.get_for_ck(tablename)
             if res and len(res)>0:
@@ -168,6 +220,158 @@ class QIFI_Account():
         else:
             return self._trading_day
 
+    def _require_mapping(self, field_name, value):
+        if not isinstance(value, dict):
+            raise TypeError("{} must be a dict".format(field_name))
+        return value
+
+    def _require_string(self, field_name, value):
+        if not isinstance(value, str):
+            raise TypeError("{} must be a str".format(field_name))
+        if value == "":
+            raise ValueError("{} cannot be empty".format(field_name))
+        return value
+
+    def _require_numeric(self, field_name, value):
+        if not isinstance(value, numbers.Real):
+            raise TypeError("{} must be numeric".format(field_name))
+        return value
+
+    def _is_unknown_derivative_code(self, code, exchange_id=None):
+        if not isinstance(code, str):
+            return False
+        instrument_id = code.split('.')[-1]
+        if not any(ch.isalpha() for ch in instrument_id):
+            return False
+        preset = self.market_preset.get_code(instrument_id)
+        resolved_exchange = exchange_id or preset.get('exchange')
+        return (
+            preset.get('name') == 'default' and
+            resolved_exchange == 'stock_cn'
+        )
+
+    def _validate_qifi_position_message(self, position_key, position, account_cookie, portfolio_cookie):
+        position = self._require_mapping(
+            "positions[{!r}]".format(position_key),
+            position
+        )
+        instrument_id = position.get('instrument_id') or position.get('code')
+        if not instrument_id:
+            raise ValueError(
+                "positions[{!r}] missing instrument_id/code".format(position_key)
+            )
+        exchange_id = self._require_string(
+            "positions[{!r}].exchange_id".format(position_key),
+            position.get('exchange_id')
+        )
+        if self._is_unknown_derivative_code(instrument_id, exchange_id=exchange_id):
+            raise ValueError(
+                "positions[{!r}] uses unknown derivative instrument {!r}".format(
+                    position_key, instrument_id
+                )
+            )
+        missing_fields = [
+            field for field in self._REQUIRED_QIFI_POSITION_FIELDS if field not in position
+        ]
+        if missing_fields:
+            raise ValueError(
+                "positions[{!r}] missing fields: {}".format(
+                    position_key, ", ".join(missing_fields)
+                )
+            )
+        if position['account_cookie'] != account_cookie:
+            raise ValueError(
+                "positions[{!r}].account_cookie mismatch".format(position_key)
+            )
+        if position['portfolio_cookie'] != portfolio_cookie:
+            raise ValueError(
+                "positions[{!r}].portfolio_cookie mismatch".format(position_key)
+            )
+        if position['username'] != account_cookie:
+            raise ValueError(
+                "positions[{!r}].username mismatch".format(position_key)
+            )
+        if not isinstance(position['frozen'], dict):
+            raise TypeError(
+                "positions[{!r}].frozen must be a dict".format(position_key)
+            )
+        if not isinstance(position['trades'], list):
+            raise TypeError(
+                "positions[{!r}].trades must be a list".format(position_key)
+            )
+        if not isinstance(position['orders'], dict):
+            raise TypeError(
+                "positions[{!r}].orders must be a dict".format(position_key)
+            )
+
+    def _validate_qifi_message(self, message):
+        if not isinstance(message, dict):
+            raise TypeError("QIFI message must be a dict")
+
+        account_cookie = self._require_string(
+            'account_cookie',
+            message.get('account_cookie')
+        )
+        accounts = self._require_mapping('accounts', message.get('accounts'))
+        positions = self._require_mapping('positions', message.get('positions'))
+        orders = self._require_mapping('orders', message.get('orders'))
+        trades = self._require_mapping('trades', message.get('trades'))
+
+        if 'portfolio' not in message:
+            raise ValueError("portfolio is required in QIFI message")
+        portfolio_cookie = self._require_string('portfolio', message.get('portfolio'))
+
+        missing_account_fields = [
+            field for field in self._REQUIRED_QIFI_ACCOUNT_FIELDS if field not in accounts
+        ]
+        if missing_account_fields:
+            raise ValueError(
+                "accounts missing fields: {}".format(", ".join(missing_account_fields))
+            )
+        if accounts['user_id'] != account_cookie:
+            raise ValueError("accounts.user_id must match account_cookie")
+        if account_cookie != self.user_id:
+            raise ValueError("account_cookie does not match current account")
+        if portfolio_cookie != self.portfolio:
+            raise ValueError("portfolio does not match current account")
+
+        for field in self._REQUIRED_QIFI_ACCOUNT_FIELDS[1:]:
+            self._require_numeric("accounts.{}".format(field), accounts[field])
+
+        for optional_dict_field in ('event', 'transfers', 'banks', 'frozen'):
+            if optional_dict_field in message and not isinstance(message[optional_dict_field], dict):
+                raise TypeError("{} must be a dict".format(optional_dict_field))
+
+        if 'money' in message:
+            self._require_numeric('money', message['money'])
+        if 'taskid' in message:
+            self._require_string('taskid', message['taskid'])
+        if 'sourceid' in message:
+            self._require_string('sourceid', message['sourceid'])
+        if 'status' in message and not isinstance(message['status'], int):
+            raise TypeError("status must be an int")
+        if 'wsuri' in message and message['wsuri'] is not None and not isinstance(message['wsuri'], str):
+            raise TypeError("wsuri must be a str")
+        if 'trading_day' in message and message['trading_day'] is not None and not isinstance(message['trading_day'], str):
+            raise TypeError("trading_day must be a str")
+
+        for position_key, position in positions.items():
+            self._validate_qifi_position_message(
+                position_key,
+                position,
+                account_cookie=account_cookie,
+                portfolio_cookie=portfolio_cookie
+            )
+
+        for collection_name, collection in (('orders', orders), ('trades', trades)):
+            for item_key, item in collection.items():
+                if not isinstance(item, dict):
+                    raise TypeError(
+                        "{}[{!r}] must be a dict".format(collection_name, item_key)
+                    )
+
+        return message
+
     def reload(self):
         if self.model.upper() in ['REAL', 'SIM']:
             message = self.db.account.find_one(
@@ -184,39 +388,11 @@ class QIFI_Account():
                 elif time.weekday() in [4, 5, 6]:
                     self._trading_day = time.date() + datetime.timedelta(days=(7-time.weekday()))
             if message is not None:
-                accpart = message.get('accounts')
-
-                self.money = message.get('money')
-                self.source_id = message.get('sourceid')
-
-                self.pre_balance = accpart.get('pre_balance')
-                self.deposit = accpart.get('deposit')
-                self.withdraw = accpart.get('withdraw')
-                self.withdrawQuota = accpart.get('WithdrawQuota')
-                self.close_profit = accpart.get('close_profit')
-                self.static_balance = accpart.get('static_balance')
-                self.event = message.get('event')
-                self.trades = message.get('trades')
-                self.transfers = message.get('transfers')
-                self.orders = message.get('orders')
-                self.taskid = message.get('taskid', str(uuid.uuid4()))
-
-                positions = message.get('positions')
-                for position in positions.values():
-                    p = QA_Position(
-                    ).loadfrommessage(position)
-
-                    self.positions[position.get('exchange_id')+'.'+position.get('instrument_id')] = QA_Position(
-                    ).loadfrommessage(position)
+                self._load_qifi_message(message)
 
                 for order in self.open_orders:
                     self.log('try to deal {}'.format(order))
                     self.make_deal(order)
-
-                self.banks = message.get('banks')
-
-                self.status = message.get('status')
-                self.wsuri = message.get('wsuri')
 
                 self.on_reload()
 
@@ -228,8 +404,49 @@ class QIFI_Account():
                     # settle
                     self.settle()
 
+    def _load_qifi_message(self, message):
+        message = self._validate_qifi_message(message)
+        accpart = message['accounts']
+
+        self.money = message.get('money', self.money)
+        self.source_id = message.get('sourceid', self.source_id)
+
+        self.pre_balance = accpart.get('pre_balance', self.pre_balance)
+        self.deposit = accpart.get('deposit', self.deposit)
+        self.withdraw = accpart.get('withdraw', self.withdraw)
+        self.withdrawQuota = accpart.get('WithdrawQuota', self.withdrawQuota)
+        self.close_profit = accpart.get('close_profit', self.close_profit)
+        self.static_balance = accpart.get('static_balance', self.static_balance)
+        self.event = message.get('event') or {}
+        self.trades = message['trades']
+        self.transfers = message.get('transfers') or {}
+        self.orders = message['orders']
+        self.frozen = message.get('frozen') or {}
+        self.taskid = message.get('taskid', str(uuid.uuid4()))
+
+        self.positions = {}
+        positions = message['positions']
+        for position in positions.values():
+            loaded_position = QA_Position().loadfrommessage(position)
+            key = '{}.{}'.format(
+                position.get('exchange_id'),
+                position.get('instrument_id')
+            )
+            self.positions[key] = loaded_position
+
+        self.banks = message.get('banks') or {}
+        self.status = message.get('status', self.status)
+        self.wsuri = message.get('wsuri', self.wsuri)
+        trading_day = message.get('trading_day')
+        if trading_day is not None:
+            self._trading_day = trading_day
+        self.persist_pending = False
+        return self
+
     def create_fromQIFI(self, message):
-        pass
+        self._load_qifi_message(message)
+        self.on_reload()
+        return self
 
     def order_rule(self):
         """
@@ -399,6 +616,8 @@ class QIFI_Account():
     def sync(self):
         self.on_sync()
         try:
+            self.last_sync_error = None
+            self.last_sync_success = True
             if not self.nodatabase:
                 if self.dbname in ['ck', 'clickhouse']:
                     self.save_ck()
@@ -420,18 +639,32 @@ class QIFI_Account():
                         self.db.hisaccount.insert_one(
                             {'updatetime': self.dtstr, 'account_cookie': self.user_id, 'accounts': self.account_msg})
 
-            else:
+            self.persist_pending = False
+            return self.message
+        except Exception:
+            self.last_sync_success = False
+            self.persist_pending = True
+            self.last_sync_error = traceback.format_exc()
+            self.log(self.last_sync_error)
+            return None
 
-                print(
-                    'pretend to save to database {}/{}'.format(self.user_id, self.trading_day))
-                print(self.message)
-                return self.message
-        except:
-            traceback.print_exc()
+    def _mark_persist_pending(self):
+        if not self.nodatabase:
+            self.persist_pending = True
+
+    def _sync_or_raise(self, context='sync'):
+        result = self.sync()
+        if self.strict_sync and result is None:
+            raise RuntimeError(
+                "QIFI sync failed during {}: {}".format(
+                    context, self.last_sync_error or 'unknown error'
+                )
+            )
+        return result
 
     def settle(self):
         self.log('settle')
-        self.sync()
+        self._sync_or_raise('settle')
 
         self.pre_balance += (self.deposit - self.withdraw + self.close_profit)
         self.static_balance = self.pre_balance
@@ -465,7 +698,7 @@ class QIFI_Account():
             self.send_order(order['code'], order['amount'],
                             order['price'], order['towards'], order['order_id'])
         self.schedule = {}
-        self.qifi_id = uuid.uuid4()
+        self.qifi_id = str(uuid.uuid4())
 
     def on_sync(self):
         pass
@@ -480,8 +713,8 @@ class QIFI_Account():
         else:
             return str(datetime.datetime.now()).replace('.', '_')
 
-    def ask_deposit(self, money):
-
+    def _apply_deposit(self, money):
+        self._mark_persist_pending()
         self.deposit += money
         self.money += money
         self.transfers[str(self.event_id)] = {
@@ -493,8 +726,14 @@ class QIFI_Account():
         }
         self.event[self.dtstr] = "转账成功 {}".format(money)
 
-    def ask_withdraw(self, money):
+    def ask_deposit(self, money):
+        self._apply_deposit(money)
+        if self.model != "BACKTEST":
+            self._sync_or_raise('ask_deposit')
+
+    def _apply_withdraw(self, money):
         if self.withdrawQuota > money:
+            self._mark_persist_pending()
             self.withdrawQuota -= money
             self.withdraw += money
             self.transfers[str(self.event_id)] = {
@@ -505,11 +744,20 @@ class QIFI_Account():
                 "error_msg": "成功",  # 转账结果代码
             }
             self.event[self.dtstr] = "转账成功 {}".format(-money)
+            return True
         else:
             self.event[self.dtstr] = "转账失败: 余额不足 left {}  ask {}".format(
                 self.withdrawQuota, money)
+            return False
+
+    def ask_withdraw(self, money):
+        success = self._apply_withdraw(money)
+        if success and self.model != "BACKTEST":
+            self._sync_or_raise('ask_withdraw')
+        return success
 
     def create_simaccount(self):
+        self._mark_persist_pending()
         self._trading_day = str(datetime.date.today())
         self.wsuri = "ws://www.yutiansut.com:7988"
         self.pre_balance = 0
@@ -535,7 +783,7 @@ class QIFI_Account():
             "fetch_amount": 0.0,
             "qry_count": 0
         }
-        self.ask_deposit(self.init_cash)
+        self._apply_deposit(self.init_cash)
 
     def create_backtestaccount(self):
         """
@@ -545,6 +793,7 @@ class QIFI_Account():
 
 
         """
+        self._mark_persist_pending()
         self._trading_day = ""
         self.pre_balance = self.init_cash
         self.static_balance = self.init_cash
@@ -585,7 +834,8 @@ class QIFI_Account():
         pass
 
     def log(self, message):
-        print(message)
+        if self.verbose:
+            print(message)
         #self.event[self.dtstr] = message
 
     @property
@@ -626,10 +876,12 @@ class QIFI_Account():
             "banks": self.banks,
             "frozen": self.frozen,
             "settlement": {},
+            "sync_state": self.sync_state,
         }
 
     @property
     def account_msg(self):
+        balance = self.balance
         return {
             "user_id": self.user_id,
             "currency": "CNY",
@@ -649,7 +901,16 @@ class QIFI_Account():
             "frozen_commission": 0.0,
             "frozen_premium": 0.0,
             "available": self.available,
-            "risk_ratio": 1 - self.available/self.balance
+            "risk_ratio": 0.0 if balance == 0 else 1 - self.available / balance
+        }
+
+    @property
+    def sync_state(self):
+        return {
+            "strict_sync": self.strict_sync,
+            "last_sync_success": self.last_sync_success,
+            "persist_pending": self.persist_pending,
+            "last_sync_error": self.last_sync_error,
         }
 
     @property
@@ -725,71 +986,32 @@ class QIFI_Account():
         res = False
         qapos = self.get_position(code)
 
-        #res = qapos.order_check(amount, price, towards, order_id)
-        print('account order_check')
         self.log(qapos.curpos)
         self.log(qapos.close_available)
-        if towards == ORDER_DIRECTION.BUY_CLOSE:
-            # self.log("buyclose")
-            # self.log(self.volume_short - self.volume_short_frozen)
-            # self.log(amount)
-            if (qapos.volume_short - qapos.volume_short_frozen) >= amount:
-                # check
-                qapos.volume_short_frozen_today += amount
-                #qapos.volume_short_today -= amount
-                res = True
-            else:
-                self.log("BUYCLOSE 仓位不足")
-
-        elif towards == ORDER_DIRECTION.BUY_CLOSETODAY:
-            if (qapos.volume_short_today - qapos.volume_short_frozen_today) >= amount:
-                qapos.volume_short_frozen_today += amount
-                #qapos.volume_short_today -= amount
-                res = True
-            else:
-                self.log("BUYCLOSETODAY 今日仓位不足")
-        elif towards in [ORDER_DIRECTION.SELL_CLOSE]:
-            # self.log("sellclose")
-            # self.log(self.volume_long - self.volume_long_frozen)
-            # self.log(amount)
-            if (qapos.volume_long - qapos.volume_long_frozen) >= amount:
-                qapos.volume_long_frozen_today += amount
-                #qapos.volume_long_today -= amount
-                res = True
-            else:
-                self.log("SELL CLOSE 仓位不足")
-        elif towards == ORDER_DIRECTION.SELL:
-
-            """
-            only for stock
-            """
-            if (qapos.volume_long_his - qapos.volume_long_frozen_today) >= amount:
-
-                qapos.volume_long_frozen_today += amount
-                return True
-            else:
-                print('SELLCLOSE 今日仓位不足')
-        elif towards == ORDER_DIRECTION.SELL_CLOSETODAY:
-            if (qapos.volume_long_today - qapos.volume_long_frozen_today) >= amount:
-                # self.log("sellclosetoday")
-                # self.log(self.volume_long_today - self.volume_long_frozen)
-                # self.log(amount)
-                qapos.volume_long_frozen_today += amount
-                #qapos.volume_long_today -= amount
-                return True
-            else:
-                self.log("SELLCLOSETODAY 今日仓位不足")
+        if towards in [
+            ORDER_DIRECTION.BUY_CLOSE,
+            ORDER_DIRECTION.BUY_CLOSETODAY,
+            ORDER_DIRECTION.SELL_CLOSE,
+            ORDER_DIRECTION.SELL_CLOSETODAY,
+            ORDER_DIRECTION.SELL,
+        ]:
+            res = qapos.order_check(amount, price, towards, order_id)
         elif towards in [ORDER_DIRECTION.BUY_OPEN,
                          ORDER_DIRECTION.SELL_OPEN,
                          ORDER_DIRECTION.BUY]:
             """
             冻结的保证金
             """
+            frozen_coeff = float(
+                self.market_preset.get_code(code).get(
+                    "sell_frozen_coeff" if towards == ORDER_DIRECTION.SELL_OPEN else "buy_frozen_coeff",
+                    1,
+                )
+            )
             coeff = float(price) * float(
                 self.market_preset.get_code(code).get("unit_table",
                                                       1)
-            ) * float(self.market_preset.get_code(code).get("buy_frozen_coeff",
-                                                            1))
+            ) * frozen_coeff
             moneyneed = coeff * amount
             if self.available > moneyneed:
                 self.money -= moneyneed
@@ -841,10 +1063,11 @@ class QIFI_Account():
                 "volume_left": int(amount),
                 "last_msg": "已报"
             }
+            self._mark_persist_pending()
             self.orders[order_id] = order
             self.log('下单成功 {}'.format(order_id))
             if self.model != 'BACKTEST':
-                self.sync()
+                self._sync_or_raise('send_order')
             self.on_ordersend(order)
             return order
         else:
@@ -859,7 +1082,9 @@ class QIFI_Account():
         撤单/ 释放冻结/
 
         """
+        self._mark_persist_pending()
         od = self.orders[order_id]
+        remaining_volume = od.get('volume_left', 0)
         od['last_msg'] = '已撤单'
         od['status'] = "CANCEL"
         od['volume_left'] = 0
@@ -867,19 +1092,26 @@ class QIFI_Account():
         if od['offset'] in ['CLOSE', 'CLOSETODAY']:
             pos = self.positions[od['exchange_id'] + '.' + od['instrument_id']]
             if od['direction'] == 'BUY':
-                pos.volume_short_frozen_today += od['volume_left']
+                pos.volume_short_frozen_today = max(
+                    0, pos.volume_short_frozen_today - remaining_volume
+                )
             else:
-                pos.volume_long_frozen_today += od['volume_left']
+                pos.volume_long_frozen_today = max(
+                    0, pos.volume_long_frozen_today - remaining_volume
+                )
         else:
-            frozen = self.frozen[order_id]
-            self.money += frozen['money']
-            frozen['amount'] = 0
-            frozen['money'] = 0
-            self.frozen[order_id] = frozen
+            frozen = self.frozen.get(order_id)
+            if frozen is not None:
+                self.money += frozen['money']
+                frozen['amount'] = 0
+                frozen['money'] = 0
+                self.frozen[order_id] = frozen
 
         self.orders[order_id] = od
 
         self.log('撤单成功 {}'.format(order_id))
+        if self.model != 'BACKTEST':
+            self._sync_or_raise('cancel_order')
 
     def make_deal(self, order: dict):
         if isinstance(order, dict):
@@ -933,8 +1165,6 @@ class QIFI_Account():
             trade_id = str(uuid.uuid4()) if trade_id is None else trade_id
 
             # update accounts
-            print('update trade')
-
             margin, close_profit, commission = self.get_position(code).update_pos(
                 trade_price, trade_amount, trade_towards)
             self.trades[trade_id] = {
@@ -953,6 +1183,7 @@ class QIFI_Account():
                 "commission": commission,
                 "trade_date_time": self.transform_dt(trade_time)}
 
+            self._mark_persist_pending()
             self.money -= (margin - close_profit)
             self.close_profit += (close_profit - commission)
 
@@ -960,7 +1191,7 @@ class QIFI_Account():
             if pos.volume_long == 0 and pos.volume_short == 0:
                 self.positions.pop(self.format_code(code))
             if self.model != "BACKTEST":
-                self.sync()
+                self._sync_or_raise('receive_deal')
 
     def get_position(self, code: str = None) -> QA_Position:
         """
@@ -973,7 +1204,12 @@ class QIFI_Account():
         else:
             code = self.format_code(code)
             if code not in self.positions.keys():
-                pos = QA_Position(code=code)
+                pos = QA_Position(
+                    code=code,
+                    account_cookie=self.user_id,
+                    portfolio_cookie=self.portfolio,
+                    username=self.username,
+                )
                 self.positions[code] = pos
 
             return self.positions[code]
@@ -990,9 +1226,30 @@ class QIFI_Account():
     def format_code(self, code):
 
         if '.' in code:
+            exchange_id, instrument_id = code.split('.', 1)
+            if self.strict_code_format and self._is_unknown_derivative_code(
+                instrument_id, exchange_id=exchange_id
+            ):
+                raise ValueError(
+                    "unknown derivative instrument {!r} cannot use stock_cn fallback".format(
+                        instrument_id
+                    )
+                )
             return code
-        else:
-            return self.market_preset.get_exchange(code) + '.' + code
+        exchange_id = self.market_preset.get_exchange(code)
+        if exchange_id is None:
+            raise ValueError(
+                "unknown instrument {!r} cannot infer exchange".format(code)
+            )
+        if self.strict_code_format and self._is_unknown_derivative_code(
+            code, exchange_id=exchange_id
+        ):
+            raise ValueError(
+                "unknown derivative instrument {!r} cannot use stock_cn fallback".format(
+                    code
+                )
+            )
+        return exchange_id + '.' + code
 
     def on_price_change(self, code, price, datetime=None):
         code = self.format_code(code)
@@ -1006,7 +1263,8 @@ class QIFI_Account():
                     pos.last_price = price
 
                 if self.model != 'BACKTEST':
-                    self.sync()
+                    self._mark_persist_pending()
+                    self._sync_or_raise('on_price_change')
             except Exception as e:
 
                 self.log(e)

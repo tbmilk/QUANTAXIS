@@ -3,8 +3,6 @@ use actix::prelude::*;
 use crate::qaenv::localenv::CONFIG;
 use crate::qahandlers::realtime::{Realtime, RegisterFactor, RoomMessage};
 use crate::qahandlers::state::WSRsp;
-use actix_redis::RedisActor;
-use std::collections::HashMap;
 use std::time::Duration;
 
 pub struct FactorHandler {
@@ -32,7 +30,7 @@ impl Actor for FactorHandler {
         self.realtime_addr
             .do_send(RegisterFactor(ctx.address().clone()));
 
-        ctx.run_interval(Duration::from_secs(CONFIG.common.qifi_gap), |act, ctx| {
+        ctx.run_interval(Duration::from_secs(CONFIG.common.qifi_gap), |act, _ctx| {
             println!("account_polling query");
             act.run_int();
         });

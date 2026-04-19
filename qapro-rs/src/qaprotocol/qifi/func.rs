@@ -7,7 +7,7 @@ use serde::Serialize;
 
 /// 此处为了描述如何从bson数据载入为可用的结构体,传入一个bson以使用它
 pub fn from_bson_(data: Bson) -> Option<Bson> {
-    from_bson(data).unwrap()
+    from_bson(data).ok()
 }
 
 /// 将Value值转换成已经实现了Deserialized的struct
@@ -99,12 +99,39 @@ pub fn from_str(data: &str) -> Option<Value> {
 /// println!("{:?}", x)
 ///
 /// ```
-pub fn to_doc<T>(value: T) -> Document
+pub fn to_doc<T>(value: T) -> Option<Document>
 where
     T: Serialize + std::fmt::Debug,
 {
-    // println!("{:?}", value);
-    let serialized = bson::to_bson(&value).unwrap(); // Serialize
-    let x = serialized.as_document().expect("期望一个合法的document");
-    x.to_owned()
+    bson::to_bson(&value).ok()?.as_document().cloned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Serialize;
+
+    #[derive(Debug, Serialize)]
+    struct DemoDoc {
+        hello: String,
+    }
+
+    #[test]
+    fn test_to_doc_accepts_document_like_struct() {
+        let doc = to_doc(DemoDoc {
+            hello: "world".to_string(),
+        })
+        .expect("struct should serialize into a document");
+        assert_eq!(doc.get_str("hello").ok(), Some("world"));
+    }
+
+    #[test]
+    fn test_to_doc_rejects_scalar_payload_without_panic() {
+        assert!(to_doc("scalar".to_string()).is_none());
+    }
+
+    #[test]
+    fn test_from_string_rejects_invalid_json() {
+        assert!(from_string("{not-json}".to_string()).is_none());
+    }
 }

@@ -37,7 +37,9 @@
 # 🔧 高级功能
 
 - [资源管理器](advanced/resource-manager.md)
-- [Rust集成](advanced/rust-integration.md)
+- [Rust集成（qapro-rs）](advanced/rust-integration.md)
+- [qapro-rs 与 Python 对照说明](advanced/qapro-rs-status.md)
+- [实盘交易系统任务书](advanced/live_trading_taskbook.md)
 - [数据桥接](advanced/data-bridge.md)
 - [性能优化](advanced/performance-tuning.md)
 

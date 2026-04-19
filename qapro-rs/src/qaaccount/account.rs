@@ -1,8 +1,9 @@
+#![allow(non_camel_case_types, non_snake_case, dead_code)]
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 
 use crate::qaprotocol::qifi::account::{Account, Order, Position, Trade, QIFI};
-use chrono::{Local, TimeZone, Utc};
+use chrono::{Local, NaiveDateTime};
 use csv;
 use serde::{Deserialize, Serialize};
 
@@ -131,6 +132,50 @@ pub struct QA_Account {
 }
 
 impl QA_Account {
+    fn position_storage_key(exchange_id: &str, instrument_id: &str) -> String {
+        if exchange_id.trim().is_empty() {
+            instrument_id.to_string()
+        } else {
+            format!("{}.{}", exchange_id, instrument_id)
+        }
+    }
+
+    fn resolve_position_key(&self, code: &str) -> Option<String> {
+        if self.hold.contains_key(code) {
+            return Some(code.to_string());
+        }
+
+        let mut matched: Option<String> = None;
+        for (key, position) in &self.hold {
+            let is_match = position.instrument_id == code
+                || (!position.exchange_id.is_empty()
+                    && Self::position_storage_key(&position.exchange_id, &position.instrument_id)
+                        == code)
+                || key == code;
+            if is_match {
+                if matched.is_some() {
+                    return None;
+                }
+                matched = Some(key.clone());
+            }
+        }
+
+        matched
+    }
+
+    fn position_match_count(&self, code: &str) -> usize {
+        self.hold
+            .iter()
+            .filter(|(key, position)| {
+                position.instrument_id == code
+                    || (!position.exchange_id.is_empty()
+                        && Self::position_storage_key(&position.exchange_id, &position.instrument_id)
+                            == code)
+                    || key.as_str() == code
+            })
+            .count()
+    }
+
     pub fn new(
         account_cookie: &str,
         portfolio_cookie: &str,
@@ -202,25 +247,18 @@ impl QA_Account {
         let mut accpos: HashMap<String, QA_Postions> = HashMap::new();
 
         for pos_i in pos.values_mut() {
+            let key = Self::position_storage_key(&pos_i.exchange_id, &pos_i.instrument_id);
             accpos.insert(
-                pos_i.instrument_id.to_string(),
-                QA_Postions::new_with_inithold(
-                    pos_i.instrument_id.to_string(),
-                    pos_i.user_id.to_string(),
-                    message.account_cookie.to_string().clone(),
-                    message.account_cookie.to_string().clone(),
+                key,
+                QA_Postions::from_qifi_position(
+                    pos_i,
                     message.account_cookie.to_string(),
-                    pos_i.volume_long_today,
-                    pos_i.volume_long_his,
-                    pos_i.volume_short_today,
-                    pos_i.volume_short_his,
-                    pos_i.open_price_long,
-                    pos_i.open_price_short,
+                    message.portfolio.to_string(),
                 ),
             );
         }
 
-        let mut acc = Self {
+        let acc = Self {
             init_cash: message.accounts.available,
             init_hold: HashMap::new(),
             allow_t0: false,
@@ -314,7 +352,8 @@ impl QA_Account {
     pub fn get_qifi_slice(&mut self) -> QIFI {
         let mut pos: HashMap<String, Position> = HashMap::new();
         for posx in self.hold.values_mut() {
-            pos.insert(posx.instrument_id.clone(), posx.get_qifi_position());
+            let key = Self::position_storage_key(&posx.exchange_id, &posx.instrument_id);
+            pos.insert(key, posx.get_qifi_position());
         }
 
         QIFI {
@@ -361,21 +400,19 @@ impl QA_Account {
     ///
     /// a fast way to get the realtime price/cost/volume/history
     pub fn get_position(&mut self, code: &str) -> Option<&mut QA_Postions> {
-        let pos = self.hold.get_mut(code);
-        pos
+        let key = self.resolve_position_key(code)?;
+        self.hold.get_mut(&key)
     }
 
     pub fn get_volume_long(&mut self, code: &str) -> f64 {
-        if self.hold.contains_key(code) {
-            let pos = self.get_position(code).unwrap();
+        if let Some(pos) = self.get_position(code) {
             pos.volume_long()
         } else {
             0.0
         }
     }
     pub fn get_volume_short(&mut self, code: &str) -> f64 {
-        if self.hold.contains_key(code) {
-            let pos = self.get_position(code).unwrap();
+        if let Some(pos) = self.get_position(code) {
             pos.volume_short()
         } else {
             0.0
@@ -524,7 +561,7 @@ impl QA_Account {
         }
     }
 
-    pub fn to_csv(&self, string: String) -> Result<(), Box<dyn Error>> {
+    pub fn to_csv(&self, _string: String) -> Result<(), Box<dyn Error>> {
         let mut wtr = csv::Writer::from_path(format!("{}.csv", self.account_cookie)).unwrap();
         for item in self.history.iter() {
             wtr.serialize(item)?;
@@ -610,9 +647,12 @@ impl QA_Account {
         order_id: String,
     ) -> bool {
         let mut res = false;
-        if self.hold.contains_key(code) {
-        } else {
+        let match_count = self.position_match_count(code);
+        if match_count == 0 {
             self.init_h(code);
+        } else if match_count > 1 {
+            warn!("持仓代码存在歧义, 请使用 exchange.instrument_id: {}", code);
+            return false;
         }
         let qapos = self.get_position(code).unwrap();
 
@@ -722,7 +762,7 @@ impl QA_Account {
         time: &str,
         towards: i32,
         price: f64,
-        order_id: &str,
+        _order_id: &str,
     ) -> Result<QAOrder, ()> {
         self.event_id += 1;
         let datetimer = if time.len() == 10 {
@@ -741,7 +781,7 @@ impl QA_Account {
         if self.order_check(code, amount, price, towards, order_id.clone()) {
             let order = QAOrder::new(
                 self.account_cookie.clone(),
-                code.clone().to_string(),
+                code.to_string(),
                 towards,
                 "".to_string(),
                 datetime.to_string(),
@@ -771,7 +811,7 @@ impl QA_Account {
                             user_id: self.account_cookie.clone(),
                             order_id: order_id.clone(),
                             exchange_id: "".to_string(),
-                            instrument_id: code.clone().to_string(),
+                            instrument_id: code.to_string(),
                             direction,
                             offset,
                             volume_orign: amount,
@@ -779,10 +819,11 @@ impl QA_Account {
                             limit_price: price,
                             time_condition: "AND".to_string(),
                             volume_condition: "GFD".to_string(),
-                            insert_date_time: Utc
-                                .datetime_from_str(datetime, "%Y-%m-%d %H:%M:%S")
+                            insert_date_time: NaiveDateTime::parse_from_str(datetime, "%Y-%m-%d %H:%M:%S")
                                 .unwrap()
-                                .timestamp_nanos()
+                                .and_utc()
+                                .timestamp_nanos_opt()
+                                .unwrap_or(0)
                                 - 28800000000000,
                             exchange_order_id: Uuid::new_v4().to_string(),
                             status: "FINISHED".to_string(),
@@ -818,7 +859,7 @@ impl QA_Account {
     pub fn on_price_change(&mut self, code: String, price: f64, datetime: String) {
         // 当行情变化时候 要更新计算持仓
 
-        if self.hold.contains_key(&code) {
+        if self.get_position(&code).is_some() {
             let pos = self.get_position(code.as_ref()).unwrap();
             pos.on_price_change(price, datetime.clone());
             self.change_datetime(datetime);
@@ -857,7 +898,7 @@ impl QA_Account {
         datetime: String,
         order_id: String,
         trade_id: String,
-        realorder_id: String,
+        _realorder_id: String,
         towards: i32,
         event_id: i32,
     ) {
@@ -887,17 +928,18 @@ impl QA_Account {
         // add calc tax/coeff
         //        qapos.preset.commission_coeff_pervol
 
-        self.money -= (margin - close_profit + commission + tax);
+        self.money -= margin - close_profit + commission + tax;
         self.accounts.close_profit += close_profit;
         self.cash.push(self.money);
         self.accounts.commission += commission + tax;
 
         // println!("{:?} {:?} {:?} {:?}", datetime,code,direction,offset);
 
-        let td = Utc
-            .datetime_from_str(datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
+        let td = NaiveDateTime::parse_from_str(datetime.as_ref(), "%Y-%m-%d %H:%M:%S")
             .unwrap()
-            .timestamp_nanos()
+            .and_utc()
+            .timestamp_nanos_opt()
+            .unwrap_or(0)
             - 28800000000000;
         let trade = Trade {
             seqno: event_id,
@@ -960,7 +1002,7 @@ impl QA_Account {
 
         //println!("MARGIN RELEASE {:#?}", margin.clone());
         //println!("CLOSE PROFIT RELEASE {:#?}", close_profit.clone());
-        self.money -= (margin - close_profit + commission + tax);
+        self.money -= margin - close_profit + commission + tax;
         self.accounts.close_profit += close_profit;
         self.cash.push(self.money);
         self.accounts.commission += commission + tax;
@@ -1280,6 +1322,123 @@ mod tests {
         println!("{:#?}", new_acc.trades);
 
         println!("{:#?}", new_acc.dailytrades);
+    }
+
+    #[test]
+    fn test_qifi_reload_preserves_exchange_scoped_position_fields() {
+        let mut slice = QIFI::default();
+        slice.account_cookie = "acc-1".to_string();
+        slice.portfolio = "portfolio-1".to_string();
+        slice.accounts.available = 100000.0;
+        slice.money = 100000.0;
+        slice.positions.insert(
+            "SHFE.ag2604".to_string(),
+            Position {
+                user_id: "acc-1".to_string(),
+                exchange_id: "SHFE".to_string(),
+                instrument_id: "ag2604".to_string(),
+                volume_long_today: 2.0,
+                volume_long_his: 3.0,
+                volume_long: 5.0,
+                volume_long_frozen_today: 1.0,
+                volume_long_frozen_his: 2.0,
+                volume_long_frozen: 3.0,
+                volume_short_today: 0.0,
+                volume_short_his: 1.0,
+                volume_short: 1.0,
+                volume_short_frozen_today: 0.0,
+                volume_short_frozen_his: 1.0,
+                volume_short_frozen: 1.0,
+                volume_long_yd: 0.0,
+                volume_short_yd: 0.0,
+                pos_long_his: 3.0,
+                pos_long_today: 2.0,
+                pos_short_his: 1.0,
+                pos_short_today: 0.0,
+                open_price_long: 5100.0,
+                open_price_short: 5000.0,
+                open_cost_long: 25500.0,
+                open_cost_short: 5000.0,
+                position_price_long: 5080.0,
+                position_price_short: 4990.0,
+                position_cost_long: 25400.0,
+                position_cost_short: 4990.0,
+                last_price: 5120.0,
+                float_profit_long: 0.0,
+                float_profit_short: 0.0,
+                float_profit: 0.0,
+                position_profit_long: 0.0,
+                position_profit_short: 0.0,
+                position_profit: 0.0,
+                margin_long: 1200.0,
+                margin_short: 300.0,
+                margin: 1500.0,
+            },
+        );
+        slice.orders.insert(
+            "order-1".to_string(),
+            Order {
+                order_id: "order-1".to_string(),
+                exchange_id: "SHFE".to_string(),
+                instrument_id: "ag2604".to_string(),
+                volume_orign: 5.0,
+                limit_price: 5100.0,
+                ..Order::default()
+            },
+        );
+        slice.trades.insert(
+            "trade-1".to_string(),
+            Trade {
+                trade_id: "trade-1".to_string(),
+                order_id: "order-1".to_string(),
+                exchange_id: "SHFE".to_string(),
+                instrument_id: "ag2604".to_string(),
+                volume: 1.0,
+                price: 5110.0,
+                ..Trade::default()
+            },
+        );
+
+        let mut account = QA_Account::new_from_qifi(slice);
+        let restored = account.get_position("ag2604").unwrap().clone();
+        assert_eq!(restored.exchange_id, "SHFE");
+        assert_eq!(restored.volume_long_today, 2.0);
+        assert_eq!(restored.volume_long_frozen_his, 2.0);
+        assert_eq!(restored.open_cost_long, 25500.0);
+        assert_eq!(restored.position_cost_long, 25400.0);
+        assert_eq!(restored.margin_long, 1200.0);
+        assert_eq!(restored.lastest_price, 5120.0);
+        assert!(account.hold.contains_key("SHFE.ag2604"));
+        assert!(account.dailyorders.contains_key("order-1"));
+        assert!(account.dailytrades.contains_key("trade-1"));
+    }
+
+    #[test]
+    fn test_send_order_rejects_ambiguous_instrument_alias() {
+        let mut slice = QIFI::default();
+        slice.account_cookie = "acc-1".to_string();
+        slice.portfolio = "portfolio-1".to_string();
+        slice.accounts.available = 100000.0;
+        slice.money = 100000.0;
+        slice.positions.insert(
+            "SHFE.ag2604".to_string(),
+            Position {
+                exchange_id: "SHFE".to_string(),
+                instrument_id: "ag2604".to_string(),
+                ..Position::default()
+            },
+        );
+        slice.positions.insert(
+            "CZCE.ag2604".to_string(),
+            Position {
+                exchange_id: "CZCE".to_string(),
+                instrument_id: "ag2604".to_string(),
+                ..Position::default()
+            },
+        );
+
+        let mut account = QA_Account::new_from_qifi(slice);
+        assert!(account.send_order("ag2604", 1.0, "2020-01-20 09:30:00", 1, 5000.0, "o1").is_err());
     }
 
     #[test]

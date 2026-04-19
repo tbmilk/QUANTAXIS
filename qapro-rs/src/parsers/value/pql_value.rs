@@ -8,7 +8,6 @@ use chrono::prelude::*;
 use chrono::serde::ts_seconds;
 use indexmap::IndexMap as Map;
 use ordered_float::OrderedFloat;
-use rayon::prelude::*;
 use serde_derive::{Deserialize, Serialize};
 
 use crate::parsers::sql::Selector;
@@ -41,8 +40,8 @@ impl From<PqlValue> for BPqlValue {
             PqlValue::Int(i) => Self::Int(i),
             PqlValue::Float(f) => Self::Float(f),
             PqlValue::DateTime(t) => Self::DateTime(t),
-            PqlValue::Array(_) => todo!(),
-            PqlValue::Object(_) => todo!(),
+            PqlValue::Array(_) => Self::Missing,
+            PqlValue::Object(_) => Self::Missing,
         }
     }
 }
@@ -179,15 +178,16 @@ impl PqlValue {
                 if let Some((key, tail)) = selector.split_first() {
                     match key {
                         SelectorNode::Number(key_i) => {
-                            if key_i < 0 {
-                                todo!()
+                            let key_u = if key_i < 0 {
+                                let len = array.len() as i64;
+                                ((len + key_i) % len).max(0) as usize
                             } else {
-                                let key_u = key_i as usize;
-                                array
-                                    .get(key_u)
-                                    .map(|value| value.select_by_selector(&tail))
-                                    .unwrap_or(Self::Missing)
-                            }
+                                key_i as usize
+                            };
+                            array
+                                .get(key_u)
+                                .map(|value| value.select_by_selector(&tail))
+                                .unwrap_or(Self::Missing)
                         }
                         _ => {
                             let new_array = array
@@ -226,19 +226,18 @@ impl PqlValue {
                 if let Some((key, _tail)) = selector.split_first() {
                     match key {
                         SelectorNode::Number(key_i) => {
-                            if key_i < 0 {
-                                todo!()
+                            let len = array.len() as i64;
+                            let key_u = if key_i < 0 {
+                                ((len + key_i) % len).max(0) as usize
                             } else {
-                                let key_u = key_i as usize;
-                                array.get_mut(key_u)
-                            }
+                                key_i as usize
+                            };
+                            array.get_mut(key_u)
                         }
-                        _ => {
-                            todo!()
-                        }
+                        _ => None,
                     }
                 } else {
-                    todo!()
+                    None
                 }
             }
             _ => Some(self),
@@ -298,7 +297,7 @@ impl Neg for PqlValue {
         match self {
             Self::Int(a) => Self::Int(-a),
             Self::Float(a) => Self::Float(-a),
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
@@ -325,7 +324,7 @@ impl Add for PqlValue {
                 let (vec_a, vec_b) = (PqlVector(vec![val; n]), PqlVector(array));
                 PqlValue::from(vec_a + vec_b)
             }
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
@@ -352,7 +351,7 @@ impl Sub for PqlValue {
                 let (vec_a, vec_b) = (PqlVector(vec![val; n]), PqlVector(array));
                 PqlValue::from(vec_a - vec_b)
             }
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
@@ -379,7 +378,7 @@ impl Mul for PqlValue {
                 let (vec_a, vec_b) = (PqlVector(vec![val; n]), PqlVector(array));
                 PqlValue::from(vec_a * vec_b)
             }
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
@@ -406,7 +405,7 @@ impl Div for PqlValue {
                 let (vec_a, vec_b) = (PqlVector(vec![val; n]), PqlVector(array));
                 PqlValue::from(vec_a / vec_b)
             }
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
@@ -433,21 +432,20 @@ impl Rem for PqlValue {
                 let (vec_a, vec_b) = (PqlVector(vec![val; n]), PqlVector(array));
                 PqlValue::from(vec_a % vec_b)
             }
-            _ => todo!(),
+            _ => Self::Null,
         }
     }
 }
 
 impl PqlValue {
     pub fn powf(self, other: Self) -> Self {
-        let (a, b) = match (self, other) {
-            (Self::Int(a), Self::Int(b)) => (a as f64, b as f64),
-            (Self::Int(a), Self::Float(OrderedFloat(b))) => (a as f64, b),
-            (Self::Float(OrderedFloat(a)), Self::Int(b)) => (a, b as f64),
-            (Self::Float(OrderedFloat(a)), Self::Float(OrderedFloat(b))) => (a, b),
-            _ => todo!(),
-        };
-        Self::from(a.powf(b))
+        match (self, other) {
+            (Self::Int(a), Self::Int(b)) => Self::from((a as f64).powf(b as f64)),
+            (Self::Int(a), Self::Float(OrderedFloat(b))) => Self::from((a as f64).powf(b)),
+            (Self::Float(OrderedFloat(a)), Self::Int(b)) => Self::from(a.powf(b as f64)),
+            (Self::Float(OrderedFloat(a)), Self::Float(OrderedFloat(b))) => Self::from(a.powf(b)),
+            _ => Self::Null,
+        }
     }
 }
 

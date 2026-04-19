@@ -13,9 +13,9 @@ impl From<u64> for Atom {
 
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "{{");
-        writeln!(f, "  '_1': {},", self.data);
-        writeln!(f, "}}");
+        writeln!(f, "{{")?;
+        writeln!(f, "  '_1': {},", self.data)?;
+        writeln!(f, "}}")?;
         Ok(())
     }
 }
@@ -35,9 +35,9 @@ impl From<&[u64]> for Array {
 
 impl fmt::Display for Array {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "<<");
+        writeln!(f, "<<")?;
         for atom in self.data.iter() {
-            writeln!(f, "  {},", atom);
+            writeln!(f, "  {},", atom)?;
         }
         writeln!(f, ">>")?;
         Ok(())

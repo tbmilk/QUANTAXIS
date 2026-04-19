@@ -1,8 +1,6 @@
+#![allow(unused_variables)]
 use actix::Addr;
 use actix_redis::{Command, RedisActor};
-use actix_web::{web, Error as AWError};
-use chrono::Local;
-use futures::future::join_all;
 use log::{error, info};
 use redis_async::{resp::RespValue, resp_array};
 use std::str::from_utf8;
@@ -24,7 +22,7 @@ pub fn set_bar(redis: Addr<RedisActor>, key: &str, data: String) {
 pub async fn set_bar_async(redis: Addr<RedisActor>, key: String, data: String) {
     let keys = key.as_str();
     // info!("async write data to redis");
-    redis.send(Command(resp_array!["set", keys, data])).await;
+    let _ = redis.send(Command(resp_array!["set", keys, data])).await;
 }
 
 pub async fn get_bar(redis: Addr<RedisActor>, key: &str) -> Vec<String> {

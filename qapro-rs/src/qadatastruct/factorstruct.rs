@@ -1,17 +1,6 @@
-use polars::prelude::{
-    CsvReader, DataFrame, DataType, Field, NamedFrom, ParquetReader, Result as PolarResult,
-    RollingOptions, Schema, SerReader, Series,
-};
+#![allow(non_camel_case_types, dead_code)]
+use polars::prelude::*;
 
-fn QADataStruct_Factor_schema() -> Schema {
-    Schema::new(vec![
-        Field::new("date", DataType::Utf8),
-        Field::new("order_book_id", DataType::Utf8),
-        Field::new("factor", DataType::Float32),
-    ])
-}
-
-// same with python model :: // qafactor Daily struct
 pub struct QADataStruct_Factor {
     pub data: DataFrame,
     name: String,
@@ -24,15 +13,18 @@ impl QADataStruct_Factor {
         factor: Vec<f32>,
         factorname: String,
     ) -> Self {
-        let dateS = Series::new("date", &date);
-
-        let order_book_idS = Series::new("order_book_id", &order_book_id);
-        let factorS = Series::new("factor", &factor);
-        let df = DataFrame::new(vec![dateS, order_book_idS, factorS]).unwrap();
+        let date_s = Series::new("date".into(), date);
+        let order_book_id_s = Series::new("order_book_id".into(), order_book_id);
+        let factor_s = Series::new("factor".into(), factor);
+        let df = DataFrame::new(vec![date_s.into(), order_book_id_s.into(), factor_s.into()]).unwrap();
+        let sorted = df
+            .sort(
+                ["date", "order_book_id"],
+                SortMultipleOptions::default().with_order_descending_multi([false, false]),
+            )
+            .unwrap();
         Self {
-            data: df
-                .sort(&["date", "order_book_id"], vec![false, false])
-                .unwrap(),
+            data: sorted,
             name: factorname,
         }
     }
