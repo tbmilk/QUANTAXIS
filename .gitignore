@@ -147,6 +147,7 @@ CLAUDE.md
 .claude/
 .archive/
 run/
+.codex-local/
 # jupyter-kernel
 
 kernel*.json
