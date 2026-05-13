@@ -1,6 +1,8 @@
 use chrono::{DateTime, Local};
 use serde_json::Value;
 use std::collections::BTreeMap;
+use actix_rt::{self, SystemRunner};
+use std::{thread, time::Duration};
 
 use crate::qaprotocol::qifi::account::QIFI;
 use crate::qaconnector::mongo::mongoclient::QAMongoClient;
@@ -12,6 +14,9 @@ use crate::qaenv::localenv::CONFIG;
 pub struct QATrader {
     pub qifi: QIFI,
     pub last_update_time: DateTime<Local>,
+    pub runtime: SystemRunner,
+    pub reconnect_attempts: u32,
+    pub next_reconnect_delay_secs: u64,
     // TODO: ws_sender 需要更新 WebSocket 实现
     // pub ws_sender: Option<...>,
 }
@@ -47,7 +52,22 @@ impl QATrader {
         Self {
             qifi,
             last_update_time: Local::now(),
+            runtime: actix_rt::System::new(),
+            reconnect_attempts: 0,
+            next_reconnect_delay_secs: 1,
         }
+    }
+
+    pub fn register_disconnect(&mut self) -> u64 {
+        self.reconnect_attempts += 1;
+        let delay = self.next_reconnect_delay_secs.min(60);
+        self.next_reconnect_delay_secs = delay.saturating_mul(2).min(60);
+        delay
+    }
+
+    pub fn mark_reconnected(&mut self) {
+        self.reconnect_attempts = 0;
+        self.next_reconnect_delay_secs = 1;
     }
 
     pub fn parse(&mut self, msg: String) {
@@ -127,10 +147,21 @@ impl QATrader {
         self.qifi.updatetime = self.last_update_time.format("%Y-%m-%d %H:%M:%S").to_string();
         let qifi = self.qifi.clone();
         let uri = CONFIG.account.uri.clone();
-        actix_rt::System::new().block_on(async move {
-            let client = QAMongoClient::new(&uri).await;
-            client.save_qifi_slice(qifi).await;
-        });
+        for delay in [0_u64, 1, 2, 4] {
+            if delay > 0 {
+                thread::sleep(Duration::from_secs(delay));
+            }
+            let qifi_snapshot = qifi.clone();
+            let uri_snapshot = uri.clone();
+            let result = self.runtime.block_on(async move {
+                let client = QAMongoClient::new(&uri_snapshot).await;
+                client.save_qifi_slice(qifi_snapshot).await;
+                Ok::<(), ()>(())
+            });
+            if result.is_ok() {
+                return;
+            }
+        }
     }
 
     pub async fn sync_async(&mut self) {

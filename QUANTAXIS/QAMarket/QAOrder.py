@@ -24,6 +24,7 @@
 
 import threading
 import datetime
+from decimal import Decimal, ROUND_HALF_UP
 import pandas as pd
 
 from QUANTAXIS.QAMarket.market_preset import MARKET_PRESET
@@ -66,6 +67,15 @@ order_frame 是一个管理性面板  但是还是需要一个缓存dict？
 
 
 class QA_Order():
+    _DIRECTION_MAP = {
+        ('BUY', 'OPEN'): ORDER_DIRECTION.BUY_OPEN,
+        ('SELL', 'OPEN'): ORDER_DIRECTION.SELL_OPEN,
+        ('BUY', 'CLOSE'): ORDER_DIRECTION.BUY_CLOSE,
+        ('SELL', 'CLOSE'): ORDER_DIRECTION.SELL_CLOSE,
+        ('BUY', 'CLOSETODAY'): ORDER_DIRECTION.BUY_CLOSETODAY,
+        ('SELL', 'CLOSETODAY'): ORDER_DIRECTION.SELL_CLOSETODAY,
+    }
+
     '''
         记录order
     '''
@@ -279,7 +289,9 @@ class QA_Order():
                 times) == 19 else datetime.datetime.strptime(times, '%Y-%m-%d %H:%M:%S.%f')
             return tradedt.timestamp()*1000000000
         elif isinstance(times, datetime.datetime):
-            return tradedt.timestamp()*1000000000
+            return times.timestamp()*1000000000
+        else:
+            raise TypeError('unsupported datetime type: {}'.format(type(times)))
 
     @property
     def status(self):
@@ -378,11 +390,13 @@ class QA_Order():
                     trade_time = str(trade_time)
 
                     self.trade_id.append(trade_id)
-                    self.trade_price = (
-                        self.trade_price * self.trade_amount +
-                        trade_price * trade_amount
-                    ) / (
-                        self.trade_amount + trade_amount
+                    total_amount = self.trade_amount + trade_amount
+                    weighted_price = (
+                        (Decimal(str(self.trade_price)) * Decimal(str(self.trade_amount))) +
+                        (Decimal(str(trade_price)) * Decimal(str(trade_amount)))
+                    ) / Decimal(str(total_amount))
+                    self.trade_price = float(
+                        weighted_price.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
                     )
                     self.trade_amount += trade_amount
                     self.trade_time.append(trade_time)
@@ -408,12 +422,9 @@ class QA_Order():
                 else:
                     return False
         else:
-            print(
-                RuntimeError(
-                    'ORDER STATUS {} CANNNOT TRADE'.format(self.status)
-                )
+            raise RuntimeError(
+                'ORDER STATUS {} CANNNOT TRADE'.format(self.status)
             )
-            return False
 
     def trade_message(self, trade_id, trade_price, trade_amount, trade_time):
         return {
@@ -622,16 +633,11 @@ class QA_Order():
         self.code = str(otgOrder.get('instrument_id')).upper()
         self.offset = otgOrder.get('offset')
         self.direction = otgOrder.get('direction')
-        self.towards = eval(
-            'ORDER_DIRECTION.{}_{}'.format(self.direction,
-                                           self.offset)
-        )
+        self.towards = self._DIRECTION_MAP[(self.direction, self.offset)]
         self.amount = otgOrder.get('volume_orign')
         self.trade_amount = self.amount - otgOrder.get('volume_left')
         self.price = otgOrder.get('limit_price')
-        self.order_model = eval(
-            'ORDER_MODEL.{}'.format(otgOrder.get('price_type'))
-        )
+        self.order_model = getattr(ORDER_MODEL, otgOrder.get('price_type'))
         self.time_condition = otgOrder.get('time_condition')
         if otgOrder.get('insert_date_time') == 0:
             self.datetime = 0
@@ -801,7 +807,8 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
                     ORDER_STATUS.SUCCESS_PART
                 ]
             ]
-        except:
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.pending failed: {}'.format(e))
             return []
 
     @property
@@ -811,7 +818,8 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
                 item for item in self.order_list.values()
                 if item.status in [ORDER_STATUS.FAILED]
             ]
-        except:
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.failed failed: {}'.format(e))
             return []
 
     @property
@@ -822,7 +830,8 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
                 [ORDER_STATUS.CANCEL_ALL,
                  ORDER_STATUS.CANCEL_PART]
             ]
-        except:
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.canceled failed: {}'.format(e))
             return []
 
     @property
@@ -832,7 +841,8 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
                 item for item in self.order_list.values()
                 if item.status in [ORDER_STATUS.QUEUED]
             ]
-        except:
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.untrade failed: {}'.format(e))
             return []
 
     # 🛠todo 订单队列
@@ -844,14 +854,16 @@ class QA_OrderQueue():  # also the order tree ？？ what's the tree means?
                 self.order_list[order_id].status = new_status
             else:
                 pass
-        except:
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.set_status failed: {}'.format(e))
             return None
 
     def to_df(self):
         try:
             return pd.concat([x.to_df() for x in self.order_list.values()])
-        except:
-            pass
+        except Exception as e:
+            QA_util_log_info('QA_OrderQueue.to_df failed: {}'.format(e))
+            return pd.DataFrame()
 
     @property
     def order_qifi(self):

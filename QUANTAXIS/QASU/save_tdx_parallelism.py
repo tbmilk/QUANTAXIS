@@ -41,7 +41,8 @@ from QUANTAXIS.QASU.save_tdx import now_time
 from QUANTAXIS.QAFetch.QATdx import (
     get_ip_list_by_multi_process_ping,
     stock_ip_list,
-    QA_fetch_get_stock_xdxr
+    QA_fetch_get_stock_xdxr,
+    ping as _ping_one,
 )
 from QUANTAXIS.QAUtil.QACache import QA_util_cache
 
@@ -266,6 +267,26 @@ def QA_SU_save_stock_day(client=DATABASE, ui_log=None, ui_progress=None):
 
     ips = get_ip_list_by_multi_process_ping(stock_ip_list, _type='stock')[
           :cpu_count() * 2 + 1]
+
+    # 若多进程 ping 全部超时（ip=None），fallback 到主进程顺序扫描
+    # 避免 daemon worker 里调 select_best_ip() 创建子进程 → AssertionError
+    if not ips or ips[0].get('ip') is None:
+        QA_util_log_info('多进程 ping 全部超时，切换到顺序扫描模式...')
+        import datetime as _dt
+        fallback_ip = None
+        for _item in stock_ip_list:
+            try:
+                t = _ping_one(_item['ip'], _item.get('port', 7709), 'stock')
+                if t < _dt.timedelta(0, 9, 0):
+                    fallback_ip = _item
+                    break
+            except Exception:
+                continue
+        if fallback_ip is None:
+            QA_util_log_info('所有 TDX 服务器不可达，跳过 stock_day 保存')
+            return
+        ips = [fallback_ip]
+
     param = __gen_param(stock_list, coll_stock_day, ips)
     ps = QA_SU_save_stock_day_parallelism(
         processes=cpu_count() if len(ips) >= cpu_count() else len(ips),
