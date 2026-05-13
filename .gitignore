@@ -144,6 +144,7 @@ ENV/
 
 
 CLAUDE.md
+AGENTS.md
 .claude/
 .archive/
 run/
