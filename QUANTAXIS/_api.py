@@ -353,9 +353,9 @@ from QUANTAXIS.QAFactor.featureView import QAFeatureView
 from QUANTAXIS.QAFactor.featureAnalysis import QAFeatureAnalysis
 from QUANTAXIS.QAFactor.featurebacktest import QAFeatureBacktest
 
-# Python 3.9-3.12 (与 setup.py 及 QARS2 对齐)
+# Python 3.9-3.14 (与 setup.py 及 QARS2 对齐)
 if sys.version_info < (3, 9) or sys.version_info >= (4, 0):
-    print('QUANTAXIS 2.1+ 需要 Python 3.9-3.12，当前: {}.{}.{}'.format(
+    print('QUANTAXIS 2.1+ 需要 Python 3.9-3.14，当前: {}.{}.{}'.format(
         sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
     sys.exit(1)
 

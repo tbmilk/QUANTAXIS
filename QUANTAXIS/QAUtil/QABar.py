@@ -55,19 +55,19 @@ def QA_util_make_future_min_index(day, type_='1min'):
     """
 
     if QA_util_if_trade(day) is True:
-        return pd.date_range(
-            str(day) + '21:00:00',
-            str(day) + '',
+        night = pd.date_range(
+            str(day) + ' 21:00:00',
+            str(day),
             freq=type_,
-            closed='right'
-        ).append(
-            pd.date_range(
-                str(day) + ' 13:00:00',
-                str(day) + ' 15:00:00',
-                freq=type_,
-                closed='right'
-            )
+            inclusive='right'
         )
+        afternoon = pd.date_range(
+            str(day) + ' 13:00:00',
+            str(day) + ' 15:00:00',
+            freq=type_,
+            inclusive='right'
+        )
+        return night.union(afternoon)
     else:
         return pd.DataFrame(['No trade'])
 
@@ -89,19 +89,19 @@ def QA_util_make_min_index(day, type_='1min'):
     """
 
     if QA_util_if_trade(day) is True:
-        return pd.date_range(
+        morning = pd.date_range(
             str(day) + ' 09:30:00',
             str(day) + ' 11:30:00',
             freq=type_,
-            closed='right'
-        ).append(
-            pd.date_range(
-                str(day) + ' 13:00:00',
-                str(day) + ' 15:00:00',
-                freq=type_,
-                closed='right'
-            )
+            inclusive='right'
         )
+        afternoon = pd.date_range(
+            str(day) + ' 13:00:00',
+            str(day) + ' 15:00:00',
+            freq=type_,
+            inclusive='right'
+        )
+        return morning.union(afternoon)
     else:
         return pd.DataFrame(['No trade'])
 
@@ -123,19 +123,19 @@ def QA_util_make_hour_index(day, type_='1h'):
     """
 
     if QA_util_if_trade(day) is True:
-        return pd.date_range(
+        morning = pd.date_range(
             str(day) + ' 09:30:00',
             str(day) + ' 11:30:00',
             freq=type_,
-            closed='right'
-        ).append(
-            pd.date_range(
-                str(day) + ' 13:00:00',
-                str(day) + ' 15:00:00',
-                freq=type_,
-                closed='right'
-            )
+            inclusive='right'
         )
+        afternoon = pd.date_range(
+            str(day) + ' 13:00:00',
+            str(day) + ' 15:00:00',
+            freq=type_,
+            inclusive='right'
+        )
+        return morning.union(afternoon)
     else:
         return pd.DataFrame(['No trade'])
 

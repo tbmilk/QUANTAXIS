@@ -1,14 +1,19 @@
 # coding:utf-8
 
 
-try: 
+try:
     import jqdatasdk
-    #jqdatasdk.auth(input('account:'),input('password:'))
-except:
-    raise ModuleNotFoundError
+    # jqdatasdk.auth(input('account:'), input('password:'))
+except ImportError:
+    jqdatasdk = None
 
 
 def get_price(code="600000.XSHG"):
+    if jqdatasdk is None:
+        raise ImportError(
+            "jqdatasdk is required for QAJQdata; install the optional "
+            "JoinQuant dependency before calling get_price()"
+        )
     return jqdatasdk.get_price(code,end_date='2018-05-14')
 
 

@@ -160,7 +160,7 @@ class QA_DataStruct_Stock_day(_quotation_base):
                     ).set_index(['date',
                                  'code'])
                     data = self.data.join(adj)
-                    data['adj'].fillna(method='ffill', inplace=True)
+                    data['adj'] = data['adj'].ffill()
 
                     for col in ['open', 'high', 'low', 'close']:
                         data[col] = data[col] * data['adj']
@@ -371,7 +371,7 @@ class QA_DataStruct_Stock_min(_quotation_base):
                     u = u.set_index(['date', 'code'], drop=False)
 
                     data = u.join(adj).set_index(['datetime', 'code'])
-                    data['adj'].fillna(method='ffill', inplace=True)
+                    data['adj'] = data['adj'].ffill()
 
                     for col in ['open', 'high', 'low', 'close']:
                         data[col] = data[col] * data['adj']

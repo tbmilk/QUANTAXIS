@@ -37,15 +37,15 @@ except ImportError:
 # 检查Python版本 - 与QARS2对齐到3.9+
 if sys.version_info < (3, 9) or sys.version_info >= (4, 0):
     print('=' * 60)
-    print('错误: QUANTAXIS 2.1+ 需要 Python 3.9-3.12')
+    print('错误: QUANTAXIS 2.1+ 需要 Python 3.9-3.14')
     print(f'当前版本: Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')
     print('=' * 60)
     print('\n推荐使用:')
-    print('  - Python 3.9+ (与QARS2 Rust核心兼容)')
-    print('  - Python 3.11+ (最佳性能)')
+    print('  - Python 3.12+ (最低建议验证版本，兼容 opentdx/pytdx 生态)')
+    print('  - Python 3.14 (当前目标兼容版本)')
     print('\n升级方法:')
-    print('  Ubuntu/Debian: sudo apt install python3.11')
-    print('  macOS: brew install python@3.11')
+    print('  Ubuntu/Debian: sudo apt install python3.12 或 python3.14')
+    print('  macOS: brew install python@3.12 或 python@3.14')
     print('  Windows: https://www.python.org/downloads/')
     print('=' * 60)
     sys.exit(1)
@@ -136,6 +136,8 @@ setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+        'Programming Language :: Python :: 3.14',
         'Intended Audience :: Developers',
         'Intended Audience :: Financial and Insurance Industry',
         'Operating System :: OS Independent',
@@ -155,14 +157,57 @@ setup(
             'orjson>=3.10.0',  # 快速JSON序列化
             'msgpack>=1.1.0',  # MessagePack序列化
         ],
+        'web': [
+            'gevent-websocket>=0.10.1',
+        ],
+        'viz': [
+            'pyecharts_snapshot>=0.2.0',
+        ],
+        'notebook': [
+            'IPython>=8.12.0',
+            'jupyter>=1.0.0',
+        ],
+        'analysis': [
+            'empyrical==0.5.5; python_version < "3.14"',  # 旧分析栈
+            'pyfolio>=0.9.2; python_version < "3.14"',
+            'alphalens==0.4.0; python_version < "3.14"',
+            'empyrical-reloaded>=0.5.12; python_version >= "3.14"',  # 3.14 兼容替代
+            'pyfolio-reloaded>=0.9.9; python_version >= "3.14"',
+            'alphalens-reloaded>=0.4.4; python_version >= "3.14"',
+        ],
         'full': [
+            'polars>=0.20.0,<0.22.0',
+            'orjson>=3.10.0',
+            'msgpack>=1.1.0',
+            'gevent-websocket>=0.10.1',
+            'pyecharts_snapshot>=0.2.0',
+            'empyrical==0.5.5; python_version < "3.14"',
+            'pyfolio>=0.9.2; python_version < "3.14"',
+            'alphalens==0.4.0; python_version < "3.14"',
+            'empyrical-reloaded>=0.5.12; python_version >= "3.14"',
+            'pyfolio-reloaded>=0.9.9; python_version >= "3.14"',
+            'alphalens-reloaded>=0.4.4; python_version >= "3.14"',
+            'jupyter>=1.0.0',
+            'jupyterlab>=4.0.0',
+            'IPython>=8.12.0',
+        ],
+        'full_rust': [
             'qars3>=0.0.45',
             'qadataswap>=0.1.0',
             'polars>=0.20.0,<0.22.0',
             'orjson>=3.10.0',
             'msgpack>=1.1.0',
+            'gevent-websocket>=0.10.1',
+            'pyecharts_snapshot>=0.2.0',
+            'empyrical==0.5.5; python_version < "3.14"',
+            'pyfolio>=0.9.2; python_version < "3.14"',
+            'alphalens==0.4.0; python_version < "3.14"',
+            'empyrical-reloaded>=0.5.12; python_version >= "3.14"',
+            'pyfolio-reloaded>=0.9.9; python_version >= "3.14"',
+            'alphalens-reloaded>=0.4.4; python_version >= "3.14"',
             'jupyter>=1.0.0',
             'jupyterlab>=4.0.0',
+            'IPython>=8.12.0',
         ],
     },
     entry_points={

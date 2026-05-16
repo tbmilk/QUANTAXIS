@@ -3,7 +3,10 @@
 # utf-8
 import time
 
-from QUANTAXIS.QAARP.QAStrategy import QA_Strategy
+try:
+    from QUANTAXIS.QAARP.QAStrategy import QA_Strategy
+except ImportError:
+    from QUANTAXIS.QAStrategy import QAStrategyCtaBase as QA_Strategy
 from QUANTAXIS.QAUtil.QALogs import QA_util_log_info
 from QUANTAXIS.QAUtil.QAParameter import (AMOUNT_MODEL, FREQUENCE, MARKET_TYPE,
                                           ORDER_DIRECTION, ORDER_MODEL)

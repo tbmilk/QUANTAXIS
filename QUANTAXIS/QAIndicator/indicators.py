@@ -215,7 +215,7 @@ def QA_indicator_KDJ(DataFrame, N=9, M1=3, M2=3):
     H = DataFrame['high']
     L = DataFrame['low']
 
-    RSV = ((C - LLV(L, N)) / (HHV(H, N) - LLV(L, N)) * 100).groupby('code').fillna(method='ffill')
+    RSV = ((C - LLV(L, N)) / (HHV(H, N) - LLV(L, N)) * 100).groupby('code').ffill()
     K = SMA(RSV, M1)
     D = SMA(K, M2)
     J = 3 * K - 2 * D

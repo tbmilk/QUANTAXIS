@@ -4,8 +4,14 @@ from functools import lru_cache
 import clickhouse_driver
 import pandas as pd
 import statsmodels.api as sm
-from alphalens.tears import create_full_tear_sheet
-from alphalens.utils import get_clean_factor_and_forward_returns
+try:
+    from alphalens.tears import create_full_tear_sheet
+    from alphalens.utils import get_clean_factor_and_forward_returns
+    _HAS_ALPHALENS = True
+except ImportError:
+    create_full_tear_sheet = None
+    get_clean_factor_and_forward_returns = None
+    _HAS_ALPHALENS = False
 from qaenv import (clickhouse_ip, clickhouse_password, clickhouse_port,
                    clickhouse_user)
 from QUANTAXIS.QAFetch.QAClickhouse import QACKClient
@@ -90,6 +96,11 @@ class QAFeatureAnalysis():
     @property
     @lru_cache()
     def factor_and_forward_returns(self):
+        if not _HAS_ALPHALENS:
+            raise ImportError(
+                "alphalens is required for factor_and_forward_returns; "
+                "for Python 3.14, prefer alphalens-reloaded via quantaxis[analysis]"
+            )
         feature = self.feature.reset_index()
         feature = feature.assign(date=pd.to_datetime(
             feature.date)).set_index('date')
@@ -112,6 +123,11 @@ class QAFeatureAnalysis():
                                                     cumulative_returns=True)
 
     def create_tear_sheet(self):
+        if not _HAS_ALPHALENS:
+            raise ImportError(
+                "alphalens is required for create_tear_sheet; "
+                "for Python 3.14, prefer alphalens-reloaded via quantaxis[analysis]"
+            )
         return create_full_tear_sheet(self.factor_and_forward_returns)
 
     @property

@@ -130,6 +130,69 @@ def QA_fetch_get_stock_day(
         _bs_logout()
 
 
+def QA_fetch_get_stock_block() -> pd.DataFrame:
+    """使用 baostock 获取板块数据。
+
+    包含：
+    - 行业分类（type='industry'，来自 query_stock_industry）
+    - 指数成分：沪深300 / 上证50 / 中证500（type='zs'）
+
+    返回列：code, blockname, type, source
+    """
+    _bs_login()
+    try:
+        frames: List[pd.DataFrame] = []
+
+        # ── 行业分类 ──────────────────────────────────────────────────────────
+        rs = bs.query_stock_industry()
+        if rs.error_code == "0":
+            rows: List[list] = []
+            while rs.next():
+                rows.append(rs.get_row_data())
+            if rows:
+                ind = pd.DataFrame(rows, columns=rs.fields)
+                ind["code"] = ind["code"].apply(lambda x: x.split(".")[-1])
+                ind = ind.rename(columns={"industry": "blockname"})
+                ind = ind[ind["blockname"].notna() & (ind["blockname"] != "")]
+                ind["type"] = "industry"
+                ind["source"] = "baostock"
+                frames.append(ind[["code", "blockname", "type", "source"]])
+
+        # ── 指数成分 ──────────────────────────────────────────────────────────
+        index_queries = [
+            (bs.query_hs300_stocks, "沪深300"),
+            (bs.query_sz50_stocks,  "上证50"),
+            (bs.query_zz500_stocks, "中证500"),
+        ]
+        for query_fn, name in index_queries:
+            try:
+                rs = query_fn()
+                if rs.error_code != "0":
+                    continue
+                rows = []
+                while rs.next():
+                    rows.append(rs.get_row_data())
+                if not rows:
+                    continue
+                df = pd.DataFrame(rows, columns=rs.fields)
+                df["code"] = df["code"].apply(lambda x: x.split(".")[-1])
+                df["blockname"] = name
+                df["type"] = "zs"
+                df["source"] = "baostock"
+                frames.append(df[["code", "blockname", "type", "source"]])
+            except Exception:
+                pass
+
+        if not frames:
+            return pd.DataFrame(columns=["code", "blockname", "type", "source"])
+
+        result = pd.concat(frames, ignore_index=True, sort=False)
+        result = result.drop_duplicates(subset=["code", "blockname", "type"])
+        return result.set_index("code", drop=False)
+    finally:
+        _bs_logout()
+
+
 def QA_fetch_get_stock_list():
     """
     使用 baostock 获取股票列表，返回格式尽量与 TDX 版兼容：

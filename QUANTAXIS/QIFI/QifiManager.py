@@ -27,7 +27,14 @@ def _load_quantaxis():
 def _load_pyfolio():
     with warnings.catch_warnings():
         warnings.filterwarnings('ignore', message='.*zipline.assets.*not found.*')
-        import pyfolio as pf
+        try:
+            import pyfolio as pf
+        except ImportError as exc:
+            raise ImportError(
+                "pyfolio is required for performance tear sheets; "
+                "install the optional analysis dependencies. "
+                "For Python 3.14, prefer pyfolio-reloaded via quantaxis[analysis]"
+            ) from exc
     return pf
 
 
@@ -271,7 +278,7 @@ class QA_QIFISMANAGER():
 
     def rankstrategy(self, code):
         res = pd.concat([self.get_historyassets(i) for i in code], axis=1)
-        res = res.fillna(method='bfill').ffill()
+        res = res.bfill().ffill()
         rp = (res.apply(self.get_sharpe) + res.tail(50).apply(self.get_sharpe) +
               res.tail(10).apply(self.get_sharpe)).sort_values()
 

@@ -22,15 +22,23 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import talib
 import pandas as pd
 import numpy as np
 import time
 import datetime
 import pymongo
-import tushare as ts
-from sqlalchemy import create_engine
-import psycopg2  
+try:
+    import tushare as ts
+except ImportError:
+    ts = None
+try:
+    from sqlalchemy import create_engine
+except ImportError:
+    create_engine = None
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
 import warnings
 warnings.filterwarnings("ignore")
 import QUANTAXIS as QA
@@ -42,8 +50,27 @@ from QUANTAXIS.QAUtil.QADate import (QA_util_date_str2int,QA_util_date_int2str)
 
 
 token='xxxx'  #你的tusharepro token
-pro=ts.pro_api(token)
+pro = ts.pro_api(token) if ts is not None else None
+
+
+def _ensure_pg_dependencies():
+    if ts is None or create_engine is None or psycopg2 is None:
+        missing = []
+        if ts is None:
+            missing.append('tushare')
+        if create_engine is None:
+            missing.append('sqlalchemy')
+        if psycopg2 is None:
+            missing.append('psycopg2')
+        raise ImportError(
+            "save_tusharepro_pg requires optional dependencies: {}".format(
+                ", ".join(missing)
+            )
+        )
+
+
 def cilent_pg():
+    _ensure_pg_dependencies()
     Account='postgres'#pg账号
     Password='xxxxx'   #pg密码
     database='quantaxis'  #该数据库需要提前手动建立，应该有自动建立方法，还不会。。。
@@ -58,6 +85,7 @@ def load_data_from_postgresql(mes='',client=cilent_pg()):
     return res
 
 def download_day_data_from_tushare(trade_date='20190102'):   
+    _ensure_pg_dependencies()
     trade_date = trade_date.replace('-', '') #兼容设置以防日期格式为2001-10-20格式
     lastEx = None
     retry = 10
@@ -109,6 +137,7 @@ def QA_fetch_stock_list_pg(name_biao='stock_list'):
     return res
     
 def QA_save_stock_list_pg():    
+    _ensure_pg_dependencies()
     stock_list_l= pro.stock_basic(exchange_id='', is_hs='',list_status='L' , fields='ts_code,symbol,name,area,industry,fullname,enname,market,exchange,curr_type,list_status,list_date,delist_date,is_hs')  
     stock_list_D= pro.stock_basic(exchange_id='', is_hs='',list_status='D' , fields='ts_code,symbol,name,area,industry,fullname,enname,market,exchange,curr_type,list_status,list_date,delist_date,is_hs')  
     stock_list_P= pro.stock_basic(exchange_id='', is_hs='',list_status='P' , fields='ts_code,symbol,name,area,industry,fullname,enname,market,exchange,curr_type,list_status,list_date,delist_date,is_hs')          
@@ -123,6 +152,7 @@ def QA_save_stock_list_pg():
         print(e)      
 
 def QA_save_stock_day_pg(start_date='19901219'):    
+    _ensure_pg_dependencies()
     t = time.localtime(time.time())
     if int(time.strftime('%H%M%S',t))<190000:   #晚上七点之后在更新当天数据，以免不及时
         t = time.localtime(time.time()-3600*24)
@@ -178,5 +208,3 @@ if __name__ == '__main__':
     #stock_data2=QA_fetch_stock_day_pg(code=stock_code,start_date=start_date,end_date=end_data)  
     # #获取固定日期代码部分日线数据 
     #stock_data3=QA_fetch_stock_day_pg(code=stock_code,start_date=start_date,end_date=end_date,data=data) 
-
-

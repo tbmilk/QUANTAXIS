@@ -1321,28 +1321,42 @@ def QA_fetch_get_stock_info(code, ip=None, port=None):
 def QA_fetch_get_stock_block(ip=None, port=None):
     '板块数据'
     ip, port = get_mainmarket_ip(ip, port)
+    if ip is None or port is None:
+        raise ConnectionError('无可用 TDX 服务器，所有 IP ping 超时')
     api = TdxHq_API(raise_exception=True)
     with api.connect(ip, port):
-        data = pd.concat([
-            api.to_df(api.get_and_parse_block_info("block.dat"   )).assign(type="yb"),
-            api.to_df(api.get_and_parse_block_info("block_fg.dat")).assign(type="fg"),
-            api.to_df(api.get_and_parse_block_info("block_gn.dat")).assign(type="gn"),
-            api.to_df(api.get_and_parse_block_info("block_zs.dat")).assign(type="zs"),
-            api.to_df(api.get_and_parse_block_info("hkblock.dat" )).assign(type="hk"),
-            api.to_df(api.get_and_parse_block_info("jjblock.dat" )).assign(type="jj"),
-            # api.to_df(api.get_and_parse_block_info("mgblock.dat" )).assign(type="mg"),
-            # api.to_df(api.get_and_parse_block_info("sbblock.dat" )).assign(type="sb"),
-            # api.to_df(api.get_and_parse_block_info("spblock.dat" )).assign(type="sp"),
-            # api.to_df(api.get_and_parse_block_info("ukblock.dat" )).assign(type="uk"),
-        ], sort=False)
-        incon_content = api.get_block_dat_ver_up("incon.dat").decode("GB18030")# tdx industry file 行业代码名字对照表文件, 有#号分段
+        _block_files = [
+            ("block.dat",    "yb"),
+            ("block_fg.dat", "fg"),
+            ("block_gn.dat", "gn"),
+            ("block_zs.dat", "zs"),
+            ("hkblock.dat",  "hk"),
+            ("jjblock.dat",  "jj"),
+        ]
+        _frames = []
+        for _fname, _ftype in _block_files:
+            try:
+                _df = api.to_df(api.get_and_parse_block_info(_fname)).assign(type=_ftype)
+                if _df is not None and len(_df) > 0:
+                    _frames.append(_df)
+            except Exception:
+                pass
+        data = pd.concat(_frames, sort=False) if _frames else pd.DataFrame()
+        try:
+            incon_content = api.get_block_dat_ver_up("incon.dat").decode("GB18030")
+        except Exception:
+            incon_content = ''
 
     if incon_content and len(incon_content) > 100:
         incon_block_info = _parse_block_name_info(incon_content)
     else:
-        incon_block_info = None # 如果api未能获得 incon.dat, 设置为None 则从zhb.zip文件中解压获得
+        incon_block_info = None
 
-    df = QA_fetch_get_tdx_industry(incon_block_info=incon_block_info)
+    try:
+        df = QA_fetch_get_tdx_industry(incon_block_info=incon_block_info)
+    except Exception as e:
+        QA_util_log_info(f'industry data fetch failed: {e}')
+        df = pd.DataFrame()
     if len(data) > 10:
         data = data.assign(source='tdx').\
             drop(['block_type', 'code_index'], axis=1).\
@@ -1550,16 +1564,24 @@ def QA_fetch_get_extensionmarket_info(ip=None, port=None):
         return extension_market_info
 
 
-def QA_fetch_get_extensionmarket_list(ip=None, port=None):
+def QA_fetch_get_extensionmarket_list(ip=None, port=None, batch=100):
     '期货代码list'
     ip, port = get_extensionmarket_ip(ip, port)
-    apix = TdxExHq_API(raise_exception=True)
+    apix = TdxExHq_API(raise_exception=False)
     with apix.connect(ip, port):
         num = apix.get_instrument_count()
-        return pd.concat([apix.to_df(
-            apix.get_instrument_info((int(num / 500) - i) * 500, 500))
-            for i in range(int(num / 500) + 1)], axis=0, sort=False).set_index('code',
-                                                                               drop=False)
+        if not num:
+            return pd.DataFrame()
+        chunks = []
+        pages = int(num / batch) + 1
+        for i in range(pages):
+            offset = (pages - 1 - i) * batch
+            df = apix.to_df(apix.get_instrument_info(offset, batch))
+            if df is not None and len(df) > 0 and 'code' in df.columns:
+                chunks.append(df)
+        if not chunks:
+            return pd.DataFrame()
+        return pd.concat(chunks, axis=0, sort=False).set_index('code', drop=False)
 
 
 def QA_fetch_get_future_list(ip=None, port=None):
@@ -1582,6 +1604,8 @@ def QA_fetch_get_future_list(ip=None, port=None):
     extension_market_list = QA_fetch_get_extensionmarket_list(
     ) if extension_market_list is None else extension_market_list
 
+    if extension_market_list.empty or 'market' not in extension_market_list.columns:
+        return extension_market_list
     return extension_market_list.query(
         'market==42 or market==28 or market==29 or market==30 or market==47')
 
@@ -1598,6 +1622,8 @@ def QA_fetch_get_globalindex_list(ip=None, port=None):
     extension_market_list = QA_fetch_get_extensionmarket_list(
     ) if extension_market_list is None else extension_market_list
 
+    if extension_market_list.empty or 'market' not in extension_market_list.columns:
+        return extension_market_list
     return extension_market_list.query('market==12 or market==37')
 
 
@@ -1621,6 +1647,8 @@ def QA_fetch_get_goods_list(ip=None, port=None):
     extension_market_list = QA_fetch_get_extensionmarket_list(
     ) if extension_market_list is None else extension_market_list
 
+    if extension_market_list.empty or 'market' not in extension_market_list.columns:
+        return extension_market_list
     return extension_market_list.query(
         'market==50 or market==76 or market==46')
 
@@ -1645,6 +1673,8 @@ def QA_fetch_get_globalfuture_list(ip=None, port=None):
     extension_market_list = QA_fetch_get_extensionmarket_list(
     ) if extension_market_list is None else extension_market_list
 
+    if extension_market_list.empty or 'market' not in extension_market_list.columns:
+        return extension_market_list
     return extension_market_list.query(
         'market==14 or market==15 or market==16 or market==17 or market==18 or market==19 or market==20 or market==77 or market==39')
 
@@ -1750,7 +1780,7 @@ def QA_fetch_get_option_all_contract_time_to_market():
     result = QA_fetch_get_option_list('tdx')
     # pprint.pprint(result)
     #  category  market code name desc  code
-    '''
+    r'''
     fix here :
     See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
     result['meaningful_name'] = None
@@ -2105,7 +2135,7 @@ def QA_fetch_get_option_300etf_contract_time_to_market():
     result = QA_fetch_get_option_list('tdx')
     # pprint.pprint(result)
     #  category  market code name desc  code
-    '''
+    r'''
     fix here :
     See the caveats in the documentation: http://pandas.pydata.org/pandas-docs/stable/indexing.html#indexing-view-versus-copy
     result['meaningful_name'] = None
