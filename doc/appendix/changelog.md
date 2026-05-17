@@ -8,6 +8,23 @@
 
 ---
 
+## 2026-05-17
+
+- 新增 `opentdx` backend 文档说明
+- 新增 `opentdx` 可选安装 extra（Python 3.12+）
+- 修正期货 adapter 字段语义，移除错误的 `price <- amount`
+- 修复普通指数历史涨跌家数字段，并完成与本地 MongoDB 的交叉验证
+- 补齐 `opentdx` 能力矩阵与边界说明：`future` 全量支持，`bond` 仅 realtime 可用，`globalfuture` 为 list/day 可用，`globalindex` 与 `option` 为 list-only
+- 将 `hkstock`、`hkfund`、`hkindex`、`usstock`、`macroindex`、`exchangerate` 明确归类为当前上游不可用能力
+
+## 2026-05-18
+
+- 修复 `opentdx` 列表抓取在上游返回 list 型扩展字段时的兼容问题
+- 完成 `stock_list`、`index_list`、`bond_list` 最终真实网络验收，分别返回 `5208`、`1221`、`2854` 行
+- 完成独立 MongoDB 测试库列表写库验收，确认三类列表均可真实落库，并在验收后清理测试集合
+
+---
+
 ## 📝 版本发布规范
 
 QUANTAXIS遵循语义化版本控制（Semantic Versioning）：

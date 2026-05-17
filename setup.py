@@ -175,6 +175,9 @@ setup(
             'pyfolio-reloaded>=0.9.9; python_version >= "3.14"',
             'alphalens-reloaded>=0.4.4; python_version >= "3.14"',
         ],
+        'opentdx': [
+            'opentdx>=0.1.2; python_version >= "3.12"',
+        ],
         'full': [
             'polars>=0.20.0,<0.22.0',
             'orjson>=3.10.0',
@@ -190,6 +193,7 @@ setup(
             'jupyter>=1.0.0',
             'jupyterlab>=4.0.0',
             'IPython>=8.12.0',
+            'opentdx>=0.1.2; python_version >= "3.12"',
         ],
         'full_rust': [
             'qars3>=0.0.45',

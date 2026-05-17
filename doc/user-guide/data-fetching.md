@@ -85,6 +85,14 @@ data = QA.QA_fetch_get_stock_day(
     level='day'              # 周期: 'day', 'week', 'month'
 )
 
+# 使用 opentdx backend
+data = QA.QA_fetch_get_stock_day(
+    package='opentdx',
+    code='000001',
+    start='2020-01-01',
+    end='2024-12-31',
+)
+
 # 使用Tushare数据源
 data = QA.QA_fetch_get_stock_day(
     package='tushare',
@@ -95,6 +103,30 @@ data = QA.QA_fetch_get_stock_day(
     type_='pd'               # 返回类型
 )
 ```
+
+`opentdx` 是可选 backend，当前包声明要求 Python 3.12+。启用时可安装：
+
+```bash
+pip install 'quantaxis[opentdx]'
+```
+
+#### `opentdx` 能力边界
+
+2026-05-18 的真实网络验收结果如下：
+
+| 大类 | list | day | min | realtime | transaction | 备注 |
+|---|---:|---:|---:|---:|---:|---|
+| stock | 5208 行 | 5 行 | 60 行 | 可用 | 10000 行 | list/day/min/realtime/transaction 已验证 |
+| index | 1221 行 | 5 行 | 60 行 | 可用 | 10000 行 | 普通指数历史保留 `up_count` / `down_count` |
+| future | 1201 行 | 1200 行 | 60 行 | 可用 | 10000 行 | 全量支持 |
+| bond | 2854 行 | `None` | `None` | 可用 | - | list/realtime 可用；day/min 仍无上游数据 |
+| globalfuture | 1365 行 | 1500 行 | `None` | - | - | 仅 list/day 可用 |
+| globalindex | 27986 行 | `None` | `None` | - | - | 仅 list 可用 |
+| option | 66 行 | `None` | `None` | - | - | 仅 list 可用 |
+
+以下扩展市场对象在本次验收中 `list/day/min` 均为空表或 `None`，属于上游能力限制，不是调用失败：
+
+`hkstock`、`hkfund`、`hkindex`、`usstock`、`macroindex`、`exchangerate`
 
 ### 2. 股票分钟线数据
 
@@ -116,7 +148,11 @@ data = QA.QA_fetch_get_stock_min(
     end='2024-10-25 15:00:00',
     level='5min'
 )
+```
 
+`package='opentdx'` 支持股票、ETF、普通指数和期货主链路。普通指数历史数据保留 `up_count` / `down_count`；ETF 仍按既有 MongoDB schema 输出，不附带这两列。
+
+```python
 # 查看数据结构
 print(data.head())
 #              code            datetime    open   high    low  close   volume

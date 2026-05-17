@@ -392,6 +392,41 @@ else:
     with open(STOCK_IP_FILE_PATH, "w") as f:
         json.dump(stock_ip_list, f)
 
+_opentdx_stock_ip_additions = [
+    {"ip": "110.41.147.114", "port": 7709, "name": "通达信深圳双线主站1"},
+    {"ip": "110.41.2.72", "port": 7709, "name": "通达信深圳双线主站2"},
+    {"ip": "110.41.4.4", "port": 7709, "name": "通达信深圳双线主站3"},
+    {"ip": "47.113.94.204", "port": 7709, "name": "通达信深圳双线主站4"},
+    {"ip": "8.129.174.169", "port": 7709, "name": "通达信深圳双线主站5"},
+    {"ip": "110.41.154.219", "port": 7709, "name": "通达信深圳双线主站6"},
+    {"ip": "124.70.176.52", "port": 7709, "name": "通达信上海双线主站1"},
+    {"ip": "47.100.236.28", "port": 7709, "name": "通达信上海双线主站2"},
+    {"ip": "123.60.186.45", "port": 7709, "name": "通达信上海双线主站3"},
+    {"ip": "123.60.164.122", "port": 7709, "name": "通达信上海双线主站4"},
+    {"ip": "47.116.105.28", "port": 7709, "name": "通达信上海双线主站5"},
+    {"ip": "124.70.199.56", "port": 7709, "name": "通达信上海双线主站6"},
+    {"ip": "121.36.54.217", "port": 7709, "name": "通达信北京双线主站1"},
+    {"ip": "121.36.81.195", "port": 7709, "name": "通达信北京双线主站2"},
+    {"ip": "123.249.15.60", "port": 7709, "name": "通达信北京双线主站3"},
+    {"ip": "124.71.85.110", "port": 7709, "name": "通达信广州双线主站1"},
+    {"ip": "139.9.51.18", "port": 7709, "name": "通达信广州双线主站2"},
+    {"ip": "139.159.239.163", "port": 7709, "name": "通达信广州双线主站3"},
+    {"ip": "106.14.201.131", "port": 7709, "name": "通达信上海双线主站7"},
+    {"ip": "106.14.190.242", "port": 7709, "name": "通达信上海双线主站8"},
+    {"ip": "121.36.225.169", "port": 7709, "name": "通达信上海双线主站9"},
+    {"ip": "123.60.70.228", "port": 7709, "name": "通达信上海双线主站10"},
+    {"ip": "123.60.73.44", "port": 7709, "name": "通达信上海双线主站11"},
+    {"ip": "124.70.133.119", "port": 7709, "name": "通达信上海双线主站12"},
+    {"ip": "124.71.187.72", "port": 7709, "name": "通达信上海双线主站13"},
+]
+_known_stock_ip_keys = {(item["ip"], item["port"]) for item in stock_ip_list}
+stock_ip_list.extend(
+    item for item in _opentdx_stock_ip_additions
+    if (item["ip"], item["port"]) not in _known_stock_ip_keys
+)
+with open(STOCK_IP_FILE_PATH, "w") as f:
+    json.dump(stock_ip_list, f)
+
 if os.path.exists(FUTURE_IP_FILE_PATH):
     with open(FUTURE_IP_FILE_PATH, "r") as f:
         future_ip_list = json.load(f)
@@ -423,6 +458,31 @@ else:
     ]
     with open(FUTURE_IP_FILE_PATH, "w") as f:
         json.dump(future_ip_list, f)
+
+_opentdx_future_ip_additions = [
+    {"ip": "120.25.218.6", "port": 7727, "name": "扩展市场深圳双线2"},
+    {"ip": "43.139.173.246", "port": 7727, "name": "扩展市场深圳双线3"},
+    {"ip": "159.75.90.107", "port": 7727, "name": "扩展市场深圳双线4"},
+    {"ip": "106.52.170.195", "port": 7727, "name": "扩展市场深圳双线5"},
+    {"ip": "175.24.47.69", "port": 7727, "name": "扩展市场广州双线3"},
+    {"ip": "139.9.191.175", "port": 7727, "name": "扩展市场上海双线7"},
+    {"ip": "150.158.9.199", "port": 7727, "name": "扩展市场上海双线1"},
+    {"ip": "150.158.20.127", "port": 7727, "name": "扩展市场上海双线2"},
+    {"ip": "49.235.119.116", "port": 7727, "name": "扩展市场上海双线3"},
+    {"ip": "49.234.13.160", "port": 7727, "name": "扩展市场上海双线4"},
+    {"ip": "116.205.143.214", "port": 7727, "name": "扩展市场广州双线1"},
+    {"ip": "124.71.223.19", "port": 7727, "name": "扩展市场广州双线2"},
+    {"ip": "123.60.173.210", "port": 7727, "name": "扩展市场广州双线3"},
+    {"ip": "113.45.175.47", "port": 7727, "name": "扩展市场上海双线5"},
+    {"ip": "118.89.69.202", "port": 7727, "name": "扩展市场上海双线6"},
+]
+_known_future_ip_keys = {(item["ip"], item["port"]) for item in future_ip_list}
+future_ip_list.extend(
+    item for item in _opentdx_future_ip_additions
+    if (item["ip"], item["port"]) not in _known_future_ip_keys
+)
+with open(FUTURE_IP_FILE_PATH, "w") as f:
+    json.dump(future_ip_list, f)
 
 """
 ["121.14.110.210", "119.147.212.76", "113.105.73.86", "119.147.171.211", "119.147.164.57", "119.147.164.58", "61.49.50.180", "61.49.50.181",

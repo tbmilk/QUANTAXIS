@@ -148,7 +148,9 @@ AGENTS.md
 .claude/
 .archive/
 run/
+.codex/
 .codex-local/
+/doc/codex/
 # jupyter-kernel
 
 kernel*.json

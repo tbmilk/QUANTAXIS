@@ -24,6 +24,7 @@
 from QUANTAXIS.QAFetch.QAQuery import QA_fetch_stock_list
 # from QUANTAXIS.QASU import crawl_eastmoney as crawl_eastmoney_file
 from QUANTAXIS.QASU import save_tdx as stdx
+from QUANTAXIS.QASU import save_opentdx as sotdx
 from QUANTAXIS.QASU import save_tdx_parallelism as stdx_parallelism
 from QUANTAXIS.QASU import save_tdx_file as tdx_file
 from QUANTAXIS.QASU import save_gm as sgm
@@ -563,6 +564,8 @@ def select_save_engine(engine, paralleled=False):
             return stdx_parallelism
         else:
             return stdx
+    elif engine in ['opentdx', 'otdx']:
+        return sotdx
     elif engine in ['gm', 'goldenminer']:
         return sgm
     elif engine in ['jq', 'joinquant']:
