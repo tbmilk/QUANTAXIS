@@ -284,7 +284,7 @@ def ATR_RSI_Stops(data, period=10):
         lambda x: x == True)]  # eqv.  Trim(x == False)
     PRICE_PREDICT.loc[PREDICT_JX.index, 'POSITION'] = 1
     PRICE_PREDICT.loc[PREDICT_SX.index, 'POSITION'] = -1
-    PRICE_PREDICT['POSITION'] = PRICE_PREDICT['POSITION'].ffill()
+    PRICE_PREDICT['POSITION'] = PRICE_PREDICT['POSITION'].ffill().infer_objects(copy=False)
     stop_line = rsi_ma - PRICE_PREDICT['POSITION'] * ATR
     return rsi_ma, stop_line, PRICE_PREDICT['POSITION'].values
 

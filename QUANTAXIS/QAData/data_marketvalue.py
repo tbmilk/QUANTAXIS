@@ -36,8 +36,8 @@ def QA_data_calc_marketvalue(data, xdxr):
                                         'liquidity_after']].dropna()
     res = pd.concat([data, mv], axis=1)
     res = res.assign(
-        shares=res.shares_after.groupby(level=1).ffill(),
-        lshares=res.liquidity_after.groupby(level=1).ffill()
+        shares=res.shares_after.groupby(level=1).ffill().infer_objects(copy=False),
+        lshares=res.liquidity_after.groupby(level=1).ffill().infer_objects(copy=False)
     ).sort_index()
     return res.assign(mv=res.close*res.shares*10000, liquidity_mv=res.close*res.lshares*10000)\
               .drop(['shares_after', 'liquidity_after'], axis=1)\

@@ -114,8 +114,8 @@ def _QA_data_stock_to_fq(bfq_data, xdxr_data, fqtype):
             axis=1
         )
 
-        data['if_trade'] = data['if_trade'].fillna(0)
-        data = data.ffill()
+        data['if_trade'] = data['if_trade'].fillna(0).infer_objects(copy=False)
+        data = data.ffill().infer_objects(copy=False)
 
         data = pd.concat(
             [
@@ -142,7 +142,7 @@ def _QA_data_stock_to_fq(bfq_data, xdxr_data, fqtype):
             ],
             axis=1
         )
-    data = data.fillna(0)
+    data = data.fillna(0).infer_objects(copy=False)
     data['preclose'] = (
         data['close'].shift(1) * 10 - data['fenhong'] +
         data['peigu'] * data['peigujia']
@@ -150,10 +150,10 @@ def _QA_data_stock_to_fq(bfq_data, xdxr_data, fqtype):
 
     if fqtype in ['01', 'qfq']:
         data['adj'] = (data['preclose'].shift(-1) /
-                       data['close']).fillna(1)[::-1].cumprod()
+                       data['close']).fillna(1).infer_objects(copy=False)[::-1].cumprod()
     else:
         data['adj'] = (data['close'] /
-                       data['preclose'].shift(-1)).cumprod().shift(1).fillna(1)
+                       data['preclose'].shift(-1)).cumprod().shift(1).fillna(1).infer_objects(copy=False)
 
     for col in ['open', 'high', 'low', 'close', 'preclose']:
         data[col] = data[col] * data['adj']

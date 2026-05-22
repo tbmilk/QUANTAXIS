@@ -44,7 +44,7 @@ class QACKClient():
             adjx = adjx.reset_index()
             adjx = adjx.assign(code=adjx.order_book_id).set_index(
                 ['date', 'code']).adj
-            data = u.join(adjx).set_index(['datetime', 'code']).fillna(1)
+            data = u.join(adjx).set_index(['datetime', 'code']).fillna(1).infer_objects(copy=False)
 
             for col in ['open', 'high', 'low', 'close']:
                 data[col] = data[col] * data['adj']
@@ -145,7 +145,7 @@ class QACKClient():
         u = u.set_index(['date', 'order_book_id'], drop=False).sort_index()
 
         data = u.join(adjx).set_index(
-            ['date', 'order_book_id']).sort_index().fillna(1)
+            ['date', 'order_book_id']).sort_index().fillna(1).infer_objects(copy=False)
 
         for col in ['open', 'high', 'low', 'close']:
             data[col] = data[col] * data['adj']
@@ -186,7 +186,7 @@ class QACKClient():
             adjx = adjx.reset_index()
             adjx = adjx.assign(code=adjx.order_book_id).set_index(
                 ['date', 'code']).adj
-            data = u.join(adjx).set_index(['datetime', 'code']).fillna(1)
+            data = u.join(adjx).set_index(['datetime', 'code']).fillna(1).infer_objects(copy=False)
 
             for col in ['open', 'high', 'low', 'close']:
                 if col in fields:
@@ -217,7 +217,7 @@ class QACKClient():
         u = u.set_index(['date', 'order_book_id'], drop=False).sort_index()
 
         data = u.join(adjx).set_index(
-            ['date', 'order_book_id']).sort_index().fillna(1)
+            ['date', 'order_book_id']).sort_index().fillna(1).infer_objects(copy=False)
 
         for col in ['open', 'high', 'low', 'close']:
             if col in fields:

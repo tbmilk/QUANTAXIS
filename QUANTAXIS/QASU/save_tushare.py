@@ -126,7 +126,7 @@ def QA_SU_save_stock_list_to_stock_list(client=DATABASE):
             if 'list_status' in df.columns:
                 df = df[df['list_status'] == 'L'].copy()
             df['code'] = df['ts_code'].str[:6]
-            df['name'] = df.get('name', '').fillna('')
+            df['name'] = df.get('name', '').fillna('').infer_objects(copy=False)
             df['sse'] = df['ts_code'].str.split('.').str[-1].str.lower()
     except Exception as e:
         print("Tushare Pro 获取失败:", e)
@@ -139,7 +139,7 @@ def QA_SU_save_stock_list_to_stock_list(client=DATABASE):
                 if 'code' not in df.columns and len(df.columns) > 0:
                     df['code'] = df.iloc[:, 0].astype(str).str[:6]
                 df['code'] = df['code'].astype(str).str[:6]
-                df['name'] = df['name'].fillna('') if 'name' in df.columns else ''
+                df['name'] = df['name'].fillna('').infer_objects(copy=False) if 'name' in df.columns else ''
                 df['sse'] = df['code'].apply(lambda c: 'sh' if str(c).startswith('6') else 'sz')
         except Exception as e2:
             print("请设置 TUSHARE_TOKEN 或环境变量 TUSHARE_TOKEN，或配置 ~/.quantaxis/setting/config.ini [TSPRO] token")

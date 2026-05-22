@@ -213,7 +213,7 @@ def _normalize_standard_min(rows: list[dict], code: str, start: str, end: str, t
     data["type"] = type_
     drop_cols = [c for c in ["market", "name", "category", "vol_unit", "pre_close", "avg", "industry", "momentum", "float_shares", "turnover"] if c in data.columns]
     data = data.drop(columns=drop_cols, errors="ignore")
-    data = data.set_index("datetime", drop=False)[start:end]
+    data = data.set_index("datetime", drop=False).sort_index()[start:end]
     data["datetime"] = data["datetime"].apply(str)
     return data if len(data) > 0 else None
 
@@ -981,7 +981,7 @@ def _normalize_goods_min(rows: list[dict], code: str, start: str, end: str, type
             data["price"] = data["close"]
     if "trade" not in data.columns and "vol" in data.columns:
         data["trade"] = data["vol"]
-    data = data.set_index("datetime", drop=False)[start:end].sort_index()
+    data = data.set_index("datetime", drop=False).sort_index()[start:end]
     data["datetime"] = data["datetime"].apply(str)
     return data if len(data) > 0 else None
 

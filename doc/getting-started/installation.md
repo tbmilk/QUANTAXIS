@@ -2,7 +2,7 @@
 
 > 🚀 **QUANTAXIS 2.1.0** - 完整安装教程和依赖配置
 >
-> **版本**: v2.1.0-alpha2 | **Python**: 3.9-3.12 | **更新**: 2025-10-25
+> **版本**: v2.1.0-alpha2 | **Python**: 3.9-3.14 | **更新**: 2026-05-18
 
 ---
 
@@ -35,10 +35,12 @@
 
 | Python版本 | 支持状态 | 说明 |
 |-----------|---------|------|
-| **3.9** | ✅ 推荐 | 稳定版本 |
+| **3.9** | ✅ 支持 | 最低版本要求 |
 | **3.10** | ✅ 推荐 | 稳定版本 |
-| **3.11** | ✅ 推荐 | 最新稳定版 |
-| **3.12** | ✅ 支持 | 最新版本 |
+| **3.11** | ✅ 推荐 | 最佳稳定版 |
+| **3.12** | ✅ 推荐 | 支持 opentdx |
+| **3.13** | ✅ 支持 | - |
+| **3.14** | ✅ 目标版本 | 当前正式运行环境（venv314） |
 | 3.8及以下 | ❌ 不支持 | - |
 
 ### 硬件要求
@@ -160,34 +162,38 @@ docker-compose up -d
 
 ### 核心依赖（必需）
 
-| 包名 | 版本要求 | 用途 |
-|------|---------|------|
-| **pandas** | ≥1.1.5 | 数据处理 |
-| **numpy** | ≥1.12.0 | 数值计算 |
-| **pymongo** | 3.11.2 | MongoDB连接 |
-| **requests** | ≥2.14.2 | HTTP请求 |
-| **lxml** | ≥3.8.0 | XML解析 |
-| **tornado** | ≥6.3.2 | Web服务器 |
+| 包名 | 版本要求 | Python 3.14+ 要求 | 用途 |
+|------|---------|-----------------|------|
+| **pandas** | ≥2.0.0 | 同左 | 数据处理 |
+| **numpy** | ≥1.24.0 | **≥2.4.0** | 数值计算 |
+| **pymongo** | ≥4.10.0 | 同左 | MongoDB连接 |
+| **requests** | ≥2.14.2 | 同左 | HTTP请求 |
+| **lxml** | ≥4.0.0 | **≥6.1.0** | XML解析 |
+| **tornado** | ≥6.4.0 | 同左 | Web服务器 |
+| **pyarrow** | ≥15.0.0 | **≥24.0.0** | Arrow格式 |
 
-安装命令：
-```bash
-pip install pandas numpy pymongo requests lxml tornado
-```
+> Python 3.14 下，`requirements.txt` 已按 `python_version` 自动分流上述版本，无需手动指定。
 
 ---
 
 ### 数据源依赖
 
-| 包名 | 版本要求 | 用途 |
-|------|---------|------|
-| **tushare** | ≥1.2.10 | 股票数据获取 |
-| **pytdx** | ≥1.67 | 通达信数据 |
-| **akshare** | latest | 多源数据获取 |
+| 包名 | 版本要求 | Python要求 | 用途 |
+|------|---------|-----------|------|
+| **tushare** | ≥1.2.10 | 3.9+ | 股票数据获取 |
+| **pytdx** | ≥1.72 | 3.9+ | 通达信数据（旧版） |
+| **opentdx** | ≥0.1.2 | **3.12+** | 通达信协议新实现 |
+| **akshare** | latest | 3.9+ | 多源数据获取 |
 
-安装命令：
 ```bash
 pip install tushare pytdx akshare
+
+# opentdx（Python 3.12+，推荐替代 pytdx）
+pip install -e .[opentdx]
+# 或直接：pip install opentdx
 ```
+
+> **opentdx vs pytdx**：opentdx 是 pytdx 的现代化重写，接口更完整、维护更活跃，在 Python 3.12+ 下推荐使用。QUANTAXIS 通过 `QAFetch/QAOpentdx.py` 提供与 QATdx 对等的接口。
 
 ---
 
@@ -215,17 +221,21 @@ cd /home/quantaxis/qadataswap && pip install -e .
 
 #### 可视化和分析
 
-| 包名 | 版本要求 | 用途 |
-|------|---------|------|
-| **matplotlib** | ≥3.0.0 | 图表绘制 |
-| **seaborn** | ≥0.11.1 | 统计可视化 |
-| **plotly** | ≥5.0.0 | 交互式图表 |
-| **empyrical** | ≥0.5.0 | 绩效分析 |
+| 包名 | Python < 3.14 | Python 3.14+ | 用途 |
+|------|--------------|-------------|------|
+| **empyrical** | `empyrical==0.5.5` | `empyrical-reloaded>=0.5.12` | 绩效分析 |
+| **pyfolio** | `pyfolio>=0.9.2` | `pyfolio-reloaded>=0.9.9` | 组合分析 |
+| **alphalens** | `alphalens==0.4.0` | `alphalens-reloaded>=0.4.4` | 因子分析 |
+| **matplotlib** | ≥3.0.0 | 同左 | 图表绘制 |
+| **seaborn** | ≥0.11.1 | 同左 | 统计可视化 |
+| **plotly** | ≥5.0.0 | 同左 | 交互式图表 |
 
-安装命令：
 ```bash
-pip install matplotlib seaborn plotly empyrical
+# 一键安装分析栈（版本自动按 Python 版本分流）
+pip install -e .[analysis]
 ```
+
+> `-reloaded` 系列包的 import 名称与原包完全相同（`import empyrical`、`import pyfolio`、`import alphalens`），无需修改代码。`alphalens` 已改为可选依赖，不阻塞 `_api` 导入；`pyfolio` 使用延迟加载。
 
 #### 机器学习
 
@@ -233,11 +243,9 @@ pip install matplotlib seaborn plotly empyrical
 |------|---------|------|
 | **scikit-learn** | ≥0.24.0 | 机器学习 |
 | **statsmodels** | ≥0.12.1 | 统计模型 |
-| **alphalens** | latest | 因子分析 |
 
-安装命令：
 ```bash
-pip install scikit-learn statsmodels alphalens
+pip install scikit-learn statsmodels
 ```
 
 ---
@@ -653,23 +661,22 @@ pip install pandas==2.0.0
 
 ### Q5: Python版本不兼容
 
-**错误**: `wrong version, should be 3.9/3.10/3.11 version`
+**错误**: `wrong version, should be 3.9/3.10/3.11/... version`
 
 **解决方案**:
 ```bash
 # 检查Python版本
 python --version
 
-# 安装Python 3.9+
-# Ubuntu/Debian
-sudo apt-get install python3.9
+# 安装Python（Ubuntu/Debian）
+sudo apt-get install python3.14   # 或 python3.12 / python3.11
 
 # macOS
-brew install python@3.9
+brew install python@3.14
 
-# 创建虚拟环境
-python3.9 -m venv quantaxis_env
-source quantaxis_env/bin/activate
+# 创建虚拟环境（以3.14为例）
+python3.14 -m venv venv314
+source venv314/bin/activate
 ```
 
 ---
@@ -727,19 +734,21 @@ QA_util_cfg_initial()
 
 ### 主要变更
 
-#### v2.1.0新特性
+#### 当前最新特性
 
-- ✅ Python 3.9+支持
+- ✅ Python 3.9-3.14 全版本支持
+- ✅ Python 3.14 依赖分流（numpy/pyarrow/lxml 版本自动选择）
+- ✅ 分析栈 `-reloaded` 自动切换（Python 3.14+）
+- ✅ opentdx 数据后端（Python 3.12+，`pip install -e .[opentdx]`）
 - ✅ QARS2 Rust账户引擎集成（100x加速）
 - ✅ QADataSwap零拷贝传输（5-10x加速）
-- ✅ QARSBridge桥接层
-- ✅ QADataBridge数据交换层
 - ✅ Polars高性能DataFrame支持
+- ✅ extras 精细拆分（rust / performance / analysis / opentdx / full / full_rust）
 
 #### 不兼容变更
 
 - ❌ 不再支持Python 3.8及以下
-- ⚠️ 部分API接口调整（向后兼容）
+- ⚠️ pymongo 须 4.10.0+（旧版 3.x API 不兼容）
 
 ---
 
@@ -748,7 +757,7 @@ QA_util_cfg_initial()
 完成安装后，请确认以下项目：
 
 ### 基础安装
-- [ ] Python 3.9+已安装
+- [ ] Python 3.9-3.14 已安装（推荐 3.14，正式环境 venv314）
 - [ ] QUANTAXIS已安装
 - [ ] MongoDB已安装并运行
 - [ ] 可以导入QUANTAXIS模块
@@ -808,4 +817,4 @@ QA_util_cfg_initial()
 ---
 
 **@yutiansut @quantaxis**
-**最后更新**: 2025-10-25
+**最后更新**: 2026-05-18

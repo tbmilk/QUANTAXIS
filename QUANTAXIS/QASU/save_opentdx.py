@@ -154,7 +154,7 @@ def _save_day_code(
 ):
     ref = list(coll.find({"code": str(code)[:code_slice]}))
     end_date = str(now_time())[:10]
-    start_date = ref[-1]["date"] if ref else start_default
+    start_date = max(r["date"] for r in ref) if ref else start_default
     QA_util_log_info(
         "{} \n Trying updating {} from {} to {}".format(
             job_name, code, start_date, end_date
@@ -171,7 +171,7 @@ def _save_min_code(code, coll, fetcher, code_slice, job_name, ui_log=None):
     for type_ in _MIN_TYPES:
         ref = list(coll.find({"code": str(code)[:code_slice], "type": type_}))
         end_time = str(now_time())[:19]
-        start_time = ref[-1]["datetime"] if ref else "2015-01-01"
+        start_time = max(r["datetime"] for r in ref) if ref else "2015-01-01"
         QA_util_log_info(
             "{} Now Saving {} from {} to {} =={} ".format(
                 job_name, code, start_time, end_time, type_
@@ -185,15 +185,38 @@ def _save_min_code(code, coll, fetcher, code_slice, job_name, ui_log=None):
             _insert_frame(coll, frame, skip_first=bool(ref))
 
 
-def _save_many(codes, saver, ui_log=None, ui_progress=None):
+def _save_many(codes, saver, workers=1, ui_log=None, ui_progress=None):
+    import concurrent.futures
+    import threading
+
     err = []
-    for item, code in enumerate(codes):
-        _log_progress(item, len(codes), ui_log, ui_progress)
-        try:
-            saver(code)
-        except Exception as error:
-            QA_util_log_info(error, ui_log=ui_log)
-            err.append(str(code))
+    total = len(codes)
+    if workers > 1:
+        _lock = threading.Lock()
+        _done = [0]
+
+        def _run(code):
+            try:
+                saver(code)
+                with _lock:
+                    _done[0] += 1
+                    _log_progress(_done[0], total, ui_log, ui_progress)
+                return None
+            except Exception as error:
+                QA_util_log_info(error, ui_log=ui_log)
+                return str(code)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(_run, codes))
+        err = [r for r in results if r is not None]
+    else:
+        for item, code in enumerate(codes):
+            _log_progress(item, total, ui_log, ui_progress)
+            try:
+                saver(code)
+            except Exception as error:
+                QA_util_log_info(error, ui_log=ui_log)
+                err.append(str(code))
     if err:
         QA_util_log_info(" ERROR CODE \n ", ui_log=ui_log)
         QA_util_log_info(err, ui_log=ui_log)
@@ -207,14 +230,15 @@ def QA_SU_save_single_stock_day(code, client=DATABASE, ui_log=None):
     _save_day_code(code, coll, QA_fetch_get_stock_day, "1990-01-01", 6, "UPDATE_STOCK_DAY", ui_log)
 
 
-def QA_SU_save_stock_day(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_stock_day(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.stock_day
     _create_day_index(coll)
     _save_many(
         _get_stock_list_with_fallback(client),
         lambda code: _save_day_code(code, coll, QA_fetch_get_stock_day, "1990-01-01", 6, "UPDATE_STOCK_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -224,18 +248,19 @@ def QA_SU_save_single_stock_min(code, client=DATABASE, ui_log=None, ui_progress=
     _save_min_code(code, coll, QA_fetch_get_stock_min, 6, "##JOB03", ui_log)
 
 
-def QA_SU_save_stock_min(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_stock_min(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.stock_min
     _create_min_index(coll)
     _save_many(
         _get_stock_list_with_fallback(client),
         lambda code: _save_min_code(code, coll, QA_fetch_get_stock_min, 6, "##JOB03", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
-def QA_SU_save_stock_transaction(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_stock_transaction(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.stock_transaction
     _create_min_index(coll)
     _save_many(
@@ -248,12 +273,13 @@ def QA_SU_save_stock_transaction(client=DATABASE, ui_log=None, ui_progress=None)
                 str(now_time())[:10],
             ),
         ),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
-def QA_SU_save_stock_xdxr(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_stock_xdxr(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     stock_list = _get_stock_list_with_fallback(client)
     coll = client.stock_xdxr
     coll_adj = client.stock_adj
@@ -279,7 +305,7 @@ def QA_SU_save_stock_xdxr(client=DATABASE, ui_log=None, ui_progress=None):
         if adjdata:
             coll_adj.insert_many(adjdata)
 
-    _save_many(stock_list, save_one, ui_log, ui_progress)
+    _save_many(stock_list, save_one, workers=workers, ui_log=ui_log, ui_progress=ui_progress)
 
 
 def QA_SU_save_stock_list(client=DATABASE, ui_log=None, ui_progress=None):
@@ -294,15 +320,16 @@ def QA_SU_save_stock_list(client=DATABASE, ui_log=None, ui_progress=None):
     QA_util_log_info("完成股票列表获取", ui_log=ui_log, ui_progress=ui_progress, ui_progress_int_value=10000)
 
 
-def QA_SU_save_stock_info(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_stock_info(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     client.drop_collection("stock_info")
     coll = client.stock_info
     coll.create_index("code")
     _save_many(
         _get_stock_list_with_fallback(client),
         lambda code: _insert_frame(coll, QA_fetch_get_stock_info(str(code))),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -316,36 +343,38 @@ def QA_SU_save_stock_block(client=DATABASE, ui_log=None, ui_progress=None):
 
 
 def QA_SU_save_single_etf_day(code, client=DATABASE, ui_log=None):
-    coll = client.index_day
+    coll = client.etf_day
     _create_day_index(coll)
     _save_day_code(code, coll, QA_fetch_get_stock_day, "1990-01-01", 6, "UPDATE_ETF_DAY", ui_log)
 
 
-def QA_SU_save_etf_day(client=DATABASE, ui_log=None, ui_progress=None):
-    coll = client.index_day
+def QA_SU_save_etf_day(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
+    coll = client.etf_day
     _create_day_index(coll)
     _save_many(
         _codes_from_frame(QA_fetch_get_stock_list("etf")),
         lambda code: _save_day_code(code, coll, QA_fetch_get_stock_day, "1990-01-01", 6, "UPDATE_ETF_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
 def QA_SU_save_single_etf_min(code, client=DATABASE, ui_log=None, ui_progress=None):
-    coll = client.index_min
+    coll = client.etf_min
     _create_min_index(coll)
     _save_min_code(code, coll, QA_fetch_get_stock_min, 6, "##JOB07", ui_log)
 
 
-def QA_SU_save_etf_min(client=DATABASE, ui_log=None, ui_progress=None):
-    coll = client.index_min
+def QA_SU_save_etf_min(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
+    coll = client.etf_min
     _create_min_index(coll)
     _save_many(
         _codes_from_frame(QA_fetch_get_stock_list("etf")),
         lambda code: _save_min_code(code, coll, QA_fetch_get_stock_min, 6, "##JOB07", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -364,14 +393,15 @@ def QA_SU_save_single_index_day(code, client=DATABASE, ui_log=None):
     _save_day_code(code, coll, QA_fetch_get_index_day, "1990-01-01", 6, "UPDATE_INDEX_DAY", ui_log)
 
 
-def QA_SU_save_index_day(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_index_day(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.index_day
     _create_day_index(coll)
     _save_many(
         _get_index_list_with_fallback(client),
         lambda code: _save_day_code(code, coll, QA_fetch_get_index_day, "1990-01-01", 6, "UPDATE_INDEX_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -381,18 +411,19 @@ def QA_SU_save_single_index_min(code, client=DATABASE, ui_log=None, ui_progress=
     _save_min_code(code, coll, QA_fetch_get_index_min, 6, "##JOB05", ui_log)
 
 
-def QA_SU_save_index_min(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_index_min(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.index_min
     _create_min_index(coll)
     _save_many(
         _get_index_list_with_fallback(client),
         lambda code: _save_min_code(code, coll, QA_fetch_get_index_min, 6, "##JOB05", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
-def QA_SU_save_index_transaction(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_index_transaction(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.index_transaction
     _create_min_index(coll)
     _save_many(
@@ -405,8 +436,9 @@ def QA_SU_save_index_transaction(client=DATABASE, ui_log=None, ui_progress=None)
                 str(now_time())[:10],
             ),
         ),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -431,28 +463,30 @@ def _future_codes(all_contracts):
 def QA_SU_save_single_future_day(code, client=DATABASE, ui_log=None, ui_progress=None):
     coll = client.future_day
     _create_day_index(coll)
-    _save_day_code(code, coll, QA_fetch_get_future_day, "2001-01-01", 4, "UPDATE_FUTURE_DAY", ui_log)
+    _save_day_code(code, coll, QA_fetch_get_future_day, "2001-01-01", 6, "UPDATE_FUTURE_DAY", ui_log)
 
 
-def QA_SU_save_future_day(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_future_day(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.future_day
     _create_day_index(coll)
     _save_many(
         _future_codes(False),
-        lambda code: _save_day_code(code, coll, QA_fetch_get_future_day, "2001-01-01", 4, "UPDATE_FUTURE_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        lambda code: _save_day_code(code, coll, QA_fetch_get_future_day, "2001-01-01", 6, "UPDATE_FUTURE_DAY", ui_log),
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
-def QA_SU_save_future_day_all(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_future_day_all(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.future_day
     _create_day_index(coll)
     _save_many(
         _future_codes(True),
         lambda code: _save_day_code(code, coll, QA_fetch_get_future_day, "2001-01-01", 6, "UPDATE_FUTURE_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -462,25 +496,27 @@ def QA_SU_save_single_future_min(code, client=DATABASE, ui_log=None, ui_progress
     _save_min_code(code, coll, QA_fetch_get_future_min, 6, "##JOB13", ui_log)
 
 
-def QA_SU_save_future_min(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_future_min(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.future_min
     _create_min_index(coll)
     _save_many(
         _future_codes(False),
         lambda code: _save_min_code(code, coll, QA_fetch_get_future_min, 6, "##JOB13", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
-def QA_SU_save_future_min_all(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_future_min_all(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.future_min
     _create_min_index(coll)
     _save_many(
         _future_codes(True),
         lambda code: _save_min_code(code, coll, QA_fetch_get_future_min, 6, "##JOB13", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -501,14 +537,15 @@ def QA_SU_save_single_bond_day(code, client=DATABASE, ui_log=None):
     _save_day_code(code, coll, QA_fetch_get_bond_day, "1990-01-01", 6, "UPDATE_BOND_DAY", ui_log)
 
 
-def QA_SU_save_bond_day(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_bond_day(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.bond_day
     _create_day_index(coll)
     _save_many(
         _codes_from_frame(QA_fetch_get_bond_list()),
         lambda code: _save_day_code(code, coll, QA_fetch_get_bond_day, "1990-01-01", 6, "UPDATE_BOND_DAY", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 
@@ -518,14 +555,15 @@ def QA_SU_save_single_bond_min(code, client=DATABASE, ui_log=None, ui_progress=N
     _save_min_code(code, coll, QA_fetch_get_bond_min, 6, "##JOB07", ui_log)
 
 
-def QA_SU_save_bond_min(client=DATABASE, ui_log=None, ui_progress=None):
+def QA_SU_save_bond_min(client=DATABASE, ui_log=None, ui_progress=None, workers=1):
     coll = client.bond_min
     _create_min_index(coll)
     _save_many(
         _codes_from_frame(QA_fetch_get_bond_list()),
         lambda code: _save_min_code(code, coll, QA_fetch_get_bond_min, 6, "##JOB07", ui_log),
-        ui_log,
-        ui_progress,
+        workers=workers,
+        ui_log=ui_log,
+        ui_progress=ui_progress,
     )
 
 

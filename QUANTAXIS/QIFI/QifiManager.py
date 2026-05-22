@@ -136,7 +136,7 @@ class QA_QIFIMANAGER():
         ).dropna().set_index('datetime').sort_index()
         res = res.balance
         res.name = self.account_cookie
-        return res.bfill().ffill().sort_index().loc[start:end]
+        return res.bfill().ffill().infer_objects(copy=False).sort_index().loc[start:end]
 
     def get_historytrade(self,):
         b = [item['trades'].values() for item in self.database.find(
@@ -231,7 +231,7 @@ class QA_QIFISMANAGER():
         res = res.balance
         res.name = account_cookie
 
-        return res.bfill().ffill().loc[start:end]
+        return res.bfill().ffill().infer_objects(copy=False).loc[start:end]
 
     def get_sharpe(self, n):
         a = ((n.iloc[-1]/n.iloc[0] - 1)/len(n)*365) / \
@@ -278,7 +278,7 @@ class QA_QIFISMANAGER():
 
     def rankstrategy(self, code):
         res = pd.concat([self.get_historyassets(i) for i in code], axis=1)
-        res = res.bfill().ffill()
+        res = res.bfill().ffill().infer_objects(copy=False)
         rp = (res.apply(self.get_sharpe) + res.tail(50).apply(self.get_sharpe) +
               res.tail(10).apply(self.get_sharpe)).sort_values()
 
