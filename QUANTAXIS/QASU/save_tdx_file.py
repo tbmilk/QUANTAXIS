@@ -26,7 +26,12 @@
 import json
 import os
 
-from pytdx.reader import TdxMinBarReader
+try:
+    from pytdx.reader import TdxMinBarReader
+    _PYTDX_READER_AVAILABLE = True
+except ImportError:
+    _PYTDX_READER_AVAILABLE = False
+    TdxMinBarReader = None
 
 from QUANTAXIS.QAUtil import (DATABASE, QA_util_date_stamp, QA_util_log_info,
                               QA_util_time_stamp)
@@ -34,13 +39,15 @@ from QUANTAXIS.QAUtil import (DATABASE, QA_util_date_stamp, QA_util_log_info,
 
 def QA_save_tdx_to_mongo(file_dir, client=DATABASE):
     """save file
-    
+
     Arguments:
         file_dir {str:direction} -- 文件的地址
-    
+
     Keyword Arguments:
         client {Mongodb:Connection} -- Mongo Connection (default: {DATABASE})
     """
+    if not _PYTDX_READER_AVAILABLE:
+        raise ImportError("pytdx is required for QA_save_tdx_to_mongo. Run: pip install pytdx")
 
     reader = TdxMinBarReader()
     __coll = client.stock_min_five

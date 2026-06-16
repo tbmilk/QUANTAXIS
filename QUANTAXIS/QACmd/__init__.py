@@ -695,7 +695,7 @@ class CLI(cmd.Cmd):
         self.lastcmd = ""
 
     def help_save(self):
-        QA_util_log_info("Save all the stock data from pytdx")
+        QA_util_log_info("Save all the stock data from opentdx (fallback: pytdx)")
 
     def do_fn(self, arg):
         try:

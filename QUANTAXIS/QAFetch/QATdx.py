@@ -33,9 +33,21 @@ import datetime
 
 import os
 import pandas as pd
-from pytdx.exhq import TdxExHq_API
-from pytdx.hq import TdxHq_API
-from pytdx.errors import TdxFunctionCallError, TdxConnectionError
+try:
+    from pytdx.exhq import TdxExHq_API
+    from pytdx.hq import TdxHq_API
+    from pytdx.errors import TdxFunctionCallError, TdxConnectionError
+    _PYTDX_AVAILABLE = True
+except ImportError:
+    _PYTDX_AVAILABLE = False
+    TdxHq_API = None
+    TdxExHq_API = None
+
+    class TdxFunctionCallError(Exception):
+        pass
+
+    class TdxConnectionError(Exception):
+        pass
 from retrying import retry
 
 
@@ -2798,6 +2810,84 @@ def QA_fetch_get_wholemarket_list():
                                                               'code', 'name'], drop=False)
 
     return pd.concat([hq_codelist, kz_codelist], sort=False).sort_index()
+
+
+# ── opentdx 优先覆盖（Python 3.12+）─────────────────────────────────────────
+# 当 opentdx 可用时，用其实现覆盖上方的 pytdx 版本；pytdx 版本保留作 fallback。
+# 不覆盖：select_best_ip / ping / ip工具函数（opentdx 自动选优）；
+#         QA_fetch_get_stock_latest / QA_fetch_depth_market_data（opentdx 暂无）；
+#         期权合约明细函数（opentdx 暂无对应实现）。
+try:
+    from QUANTAXIS.QAFetch.QAOpentdx import (  # noqa: E402
+        QA_fetch_get_security_bars,
+        QA_fetch_get_stock_day,
+        QA_fetch_get_stock_min,
+        QA_fetch_get_stock_realtime,
+        QA_fetch_get_index_realtime,
+        QA_fetch_get_bond_realtime,
+        QA_fetch_get_stock_list,
+        QA_fetch_get_index_list,
+        QA_fetch_get_bond_list,
+        QA_fetch_get_bond_day,
+        QA_fetch_get_bond_min,
+        QA_fetch_get_index_day,
+        QA_fetch_get_index_min,
+        QA_fetch_get_stock_transaction,
+        QA_fetch_get_index_transaction,
+        QA_fetch_get_stock_transaction_realtime,
+        QA_fetch_get_stock_xdxr,
+        QA_fetch_get_stock_info,
+        QA_fetch_get_stock_block,
+        QA_fetch_get_extensionmarket_list,
+        QA_fetch_get_future_list,
+        QA_fetch_get_globalindex_list,
+        QA_fetch_get_goods_list,
+        QA_fetch_get_globalfuture_list,
+        QA_fetch_get_hkstock_list,
+        QA_fetch_get_hkindex_list,
+        QA_fetch_get_hkfund_list,
+        QA_fetch_get_usstock_list,
+        QA_fetch_get_macroindex_list,
+        QA_fetch_get_option_list,
+        QA_fetch_get_future_day,
+        QA_fetch_get_future_min,
+        QA_fetch_get_future_transaction,
+        QA_fetch_get_future_transaction_realtime,
+        QA_fetch_get_future_realtime,
+        QA_fetch_get_stock_board_list,
+        QA_fetch_get_stock_board_members,
+        QA_fetch_get_stock_capital_flow,
+        QA_fetch_get_company_info_category,
+        QA_fetch_get_company_info_content,
+    )
+    _TDX_BACKEND = 'opentdx'
+except Exception as _e:
+    import logging as _logging
+    _logging.getLogger(__name__).warning("opentdx 导入失败，回退到 pytdx: %s", _e)
+    _TDX_BACKEND = 'pytdx'
+
+# 别名在覆盖块之后重新绑定，确保与 QA_fetch_get_future_day/min 保持一致
+QA_fetch_get_option_day                  = QA_fetch_get_future_day
+QA_fetch_get_option_min                  = QA_fetch_get_future_min
+QA_fetch_get_option_realtime             = QA_fetch_get_future_realtime
+QA_fetch_get_option_transaction_realtime = QA_fetch_get_future_transaction_realtime
+QA_fetch_get_hkstock_day                 = QA_fetch_get_future_day
+QA_fetch_get_hkstock_min                 = QA_fetch_get_future_min
+QA_fetch_get_hkfund_day                  = QA_fetch_get_future_day
+QA_fetch_get_hkfund_min                  = QA_fetch_get_future_min
+QA_fetch_get_hkindex_day                 = QA_fetch_get_future_day
+QA_fetch_get_hkindex_min                 = QA_fetch_get_future_min
+QA_fetch_get_usstock_day                 = QA_fetch_get_future_day
+QA_fetch_get_usstock_min                 = QA_fetch_get_future_min
+QA_fetch_get_globalfuture_day            = QA_fetch_get_future_day
+QA_fetch_get_globalfuture_min            = QA_fetch_get_future_min
+QA_fetch_get_exchangerate_day            = QA_fetch_get_future_day
+QA_fetch_get_exchangerate_min            = QA_fetch_get_future_min
+QA_fetch_get_macroindex_day              = QA_fetch_get_future_day
+QA_fetch_get_macroindex_min              = QA_fetch_get_future_min
+QA_fetch_get_globalindex_day             = QA_fetch_get_future_day
+QA_fetch_get_globalindex_min             = QA_fetch_get_future_min
+# ─────────────────────────────────────────────────────────────────────────────
 
 
 if __name__ == '__main__':

@@ -31,7 +31,12 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Thread, Timer
 
 import pandas as pd
-from pytdx.hq import TdxHq_API
+try:
+    from pytdx.hq import TdxHq_API
+    _PYTDX_AVAILABLE = True
+except ImportError:
+    _PYTDX_AVAILABLE = False
+    TdxHq_API = None
 
 from QUANTAXIS.QAEngine.QAThreadEngine import QA_Thread
 from QUANTAXIS.QAUtil.QADate_trade import QA_util_if_tradetime
@@ -48,6 +53,8 @@ from QUANTAXIS.QAUtil.QATransform import QA_util_to_json_from_pandas
 
 class QA_Tdx_Executor(QA_Thread):
     def __init__(self, thread_num=2, timeout=1, sleep_time=1, *args, **kwargs):
+        if not _PYTDX_AVAILABLE:
+            raise ImportError("pytdx is required for QA_Tdx_Executor. Run: pip install pytdx")
         super().__init__(name='QATdxExecutor')
         self.thread_num = thread_num
         self._queue = queue.Queue(maxsize=200)
